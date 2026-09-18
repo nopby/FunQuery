@@ -1,4 +1,6 @@
-﻿namespace Console;
+﻿using System.Diagnostics;
+
+namespace Console;
 
 class Lexer
 {
@@ -59,6 +61,40 @@ class Lexer
                     type,
                     startPosition,
                     position));
+                continue;
+            }
+            if (IsNumber(c))
+            {
+                int startValue = position++;
+
+                while (position < text.Length &&
+                       IsNumber(text[position]))
+                {
+                    position++;
+                }
+
+                TokenType type = TokenType.IntegerLiteral;
+
+                if (position < text.Length &&
+                    IsNumberSuffix(text[position]))
+                {
+                    char suffix = text[position++];
+
+                    type = suffix switch
+                    {
+                        'l' or 'L' => TokenType.LongLiteral,
+                        'd' or 'D' => TokenType.DoubleLiteral,
+                        'm' or 'M' => TokenType.DecimalLiteral,
+                        'f' or 'F' => TokenType.FloatLiteral,
+                        _ => throw new UnreachableException()
+                    };
+                }
+
+                tokenBuffer.Add(new Token(
+                    type,
+                    startValue,
+                    position));
+
                 continue;
             }
             if (c == '\'')
@@ -152,7 +188,12 @@ class Lexer
     private static bool IsIdentifierPart(char c) =>
         IsIdentifierStart(c)
         || c is >= '0' and <= '9';
-
+    private static bool IsNumber(char c) => c is >= '0' and <= '9';
+    private static bool IsNumberSuffix(char c) =>
+        c is 'm' || c is 'M'
+        || c is 'd' || c is 'D'
+        || c is 'f' || c is 'F'
+        || c is 'l' || c is 'L';
     private static bool IsComparisonOperator(ReadOnlySpan<char> value) =>
         value.Equals("eq", StringComparison.OrdinalIgnoreCase)
         || value.Equals("gt", StringComparison.OrdinalIgnoreCase)

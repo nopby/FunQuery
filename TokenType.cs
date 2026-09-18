@@ -4,7 +4,6 @@ public enum TokenType
 {
     Identifier,
     StringLiteral,
-    Number,
     OpenRoundParenthesis,
     CloseRoundParenthesis,
     ComparisonOperator,
@@ -16,5 +15,13 @@ public enum TokenType
     OpenCurlyParenthesis,
     CloseCurlyParenthesis,
     Comma,
-    Colon
+    Colon,
+    IntegerLiteral,
+    UIntLiteral,
+    LongLiteral,
+    ULongLiteral,
+
+    FloatLiteral,
+    DoubleLiteral,
+    DecimalLiteral,
 }

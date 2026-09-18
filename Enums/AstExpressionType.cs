@@ -8,5 +8,9 @@ public enum AstExpressionType
     StringLiteral,
     Identifier,
     Value,
-    Function
+    Function,
+    Array,
+    Block,
+    Named,
+    Call
 }

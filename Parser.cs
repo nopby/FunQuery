@@ -5,7 +5,7 @@ namespace Console;
 
 public static class Parser
 {
-    public static BaseExpression? Parse(
+    public static BaseExpression Parse(
         ReadOnlySpan<char> source,
         ReadOnlySpan<Token> tokens)
     {
@@ -93,15 +93,45 @@ public static class Parser
         return source[token.StartPosition..token.EndPosition]
             .Equals(expected, StringComparison.OrdinalIgnoreCase);
     }
+    private static BaseExpression ParsePostfix(
+    ReadOnlySpan<char> source,
+    ReadOnlySpan<Token> tokens,
+    ref int position)
+    {
+        var expression = ParsePrimary(
+            source,
+            tokens,
+            ref position);
+
+        while (Match(
+            tokens,
+            ref position,
+            TokenType.Dot))
+        {
+            var function = Consume(
+                tokens,
+                ref position,
+                TokenType.Function);
+
+            var arguments = ParseFunctionArguments(
+                source,
+                tokens,
+                ref position);
+
+            expression = new CallExpression(
+                expression,
+                function,
+                arguments);
+        }
+
+        return expression;
+    }
     private static BaseExpression ParseExpression(
         ReadOnlySpan<char> source,
         ReadOnlySpan<Token> tokens,
         ref int position)
     {
-        return ParseOr(
-            source,
-            tokens,
-            ref position);
+        return ParseOr(source, tokens, ref position);
     }
     private static BaseExpression ParsePrimary(
         ReadOnlySpan<char> source, 
@@ -111,39 +141,214 @@ public static class Parser
         if (position >= tokens.Length)
             throw new Exception("Expected expression, but reached end of input");
 
-        if (tokens[position].Type == TokenType.OpenRoundParenthesis)
-        {
-            position++; 
-
-            var inner = ParseExpression(source, tokens, ref position);
-
-            if (position >= tokens.Length ||
-                tokens[position].Type != TokenType.CloseRoundParenthesis)
-            {
-                throw new Exception("Expected ')' to close grouped expression.");
-            }
-
-            position++; 
-
-            return inner;
-        }
-
         return tokens[position].Type switch
         {
-            TokenType.StringLiteral => ParseStringLiteral(tokens, ref position),
-            TokenType.Identifier => ParseIdentifier(tokens, ref position),
-            TokenType.Number => ParseNumber(tokens, ref position),
+            TokenType.StringLiteral => ParseValue(tokens, TokenType.StringLiteral, ref position),
+            TokenType.Identifier => ParseIdentifierOrNamed(
+                source,
+                tokens,
+                ref position),
+            TokenType.IntegerLiteral => ParseValue(tokens, TokenType.IntegerLiteral, ref position),
+            TokenType.DecimalLiteral => ParseValue(tokens, TokenType.DecimalLiteral, ref position),
+            TokenType.DoubleLiteral => ParseValue(tokens, TokenType.DoubleLiteral, ref position),
+            TokenType.FloatLiteral => ParseValue(tokens, TokenType.FloatLiteral, ref position),
+            TokenType.LongLiteral => ParseValue(tokens, TokenType.LongLiteral, ref position),
+            TokenType.OpenRoundParenthesis => ParseGroupedExpression(source, tokens, ref position),
+            TokenType.Function => ParseFunction(source, tokens, ref position),
+            TokenType.OpenSquareParenthesis => ParseArray(source, tokens, ref position),
+            TokenType.OpenCurlyParenthesis => ParseBlock(source, tokens, ref position),
             _ => throw new Exception($"Expected expression, got {tokens[position].Type}.")
         };
     }
-    private static BaseExpression ParseNumber(
+    private static BaseExpression ParseIdentifierOrNamed(
+    ReadOnlySpan<char> source,
+    ReadOnlySpan<Token> tokens,
+    ref int position)
+    {
+        if (position + 1 < tokens.Length &&
+            tokens[position + 1].Type == TokenType.Colon)
+        {
+            return ParseNamed(
+                source,
+                tokens,
+                ref position);
+        }
+
+        return ParseIdentifier(
+            tokens,
+            ref position);
+    }
+    private static NamedExpression ParseNamed(
+    ReadOnlySpan<char> source,
+    ReadOnlySpan<Token> tokens,
+    ref int position)
+    {
+        var name = Consume(
+        tokens,
+        ref position,
+        TokenType.Identifier);
+
+        Consume(
+            tokens,
+            ref position,
+            TokenType.Colon);
+
+        var value = ParseExpression(
+            source,
+            tokens,
+            ref position);
+
+        return new NamedExpression(name, value);
+    }
+
+    private static BlockExpression ParseBlock(
+    ReadOnlySpan<char> source,
+    ReadOnlySpan<Token> tokens,
+    ref int position)
+    {
+        Consume(tokens, ref position, TokenType.OpenCurlyParenthesis);
+
+        List<BaseExpression> expressions = [];
+
+        while (position < tokens.Length &&
+               tokens[position].Type != TokenType.CloseCurlyParenthesis)
+        {
+            expressions.Add(
+                ParseExpression(source, tokens, ref position));
+
+            if (position < tokens.Length &&
+                tokens[position].Type == TokenType.Comma)
+            {
+                position++;
+                continue;
+            }
+
+            break;
+        }
+
+        Consume(
+            tokens,
+            ref position,
+            TokenType.CloseCurlyParenthesis);
+
+        return new BlockExpression(expressions);
+    }
+    private static BaseExpression ParseGroupedExpression(ReadOnlySpan<char> source, ReadOnlySpan<Token> tokens, ref int position)
+    {
+        Consume(
+        tokens,
+        ref position,
+        TokenType.OpenRoundParenthesis);
+
+        var expression = ParseExpression(
+        source,
+        tokens,
+        ref position);
+
+        Consume(
+            tokens,
+            ref position,
+            TokenType.CloseRoundParenthesis);
+
+        return expression;
+    }
+    private static BaseExpression ParseFunction(ReadOnlySpan<char> source, ReadOnlySpan<Token> tokens,  ref int position)
+    {
+        var function = Consume(
+        tokens,
+        ref position,
+        TokenType.Function);
+
+        var arguments = ParseFunctionArguments(
+        source,
+        tokens,
+        ref position);
+
+
+        return new FunctionExpression(
+            function,
+            arguments);
+    }
+    private static IReadOnlyList<BaseExpression> ParseFunctionArguments(
+    ReadOnlySpan<char> source,
+    ReadOnlySpan<Token> tokens,
+    ref int position)
+    {
+        Consume(
+            tokens,
+            ref position,
+            TokenType.OpenRoundParenthesis);
+
+        List<BaseExpression> arguments = [];
+
+        if (Match(
+            tokens,
+            ref position,
+            TokenType.CloseRoundParenthesis))
+        {
+            return arguments;
+        }
+
+        while (true)
+        {
+            arguments.Add(
+                ParseExpression(
+                    source,
+                    tokens,
+                    ref position));
+
+            if (Match(
+                tokens,
+                ref position,
+                TokenType.CloseRoundParenthesis))
+            {
+                break;
+            }
+
+            Consume(
+                tokens,
+                ref position,
+                TokenType.Comma);
+        }
+
+        return arguments;
+    }
+
+    private static ArrayExpression ParseArray(
+    ReadOnlySpan<char> source,
+    ReadOnlySpan<Token> tokens,
+    ref int position)
+    {
+        Consume(tokens, ref position, TokenType.OpenSquareParenthesis);
+
+        List<BaseExpression> elements = [];
+
+        if (Match(tokens, ref position, TokenType.CloseSquareParenthesis))
+            return new ArrayExpression(elements);
+
+        while (true)
+        {
+            elements.Add(
+                ParseExpression(source, tokens, ref position));
+
+            if (Match(tokens, ref position, TokenType.CloseSquareParenthesis))
+                break;
+
+            Consume(tokens, ref position, TokenType.Comma);
+        }
+
+        return new ArrayExpression(elements);
+    }
+
+    private static BaseExpression ParseValue(
         ReadOnlySpan<Token> tokens, 
+        TokenType tokenType,
         ref int position)
     {
         var token = Consume(
             tokens,
             ref position,
-            TokenType.Number);
+            tokenType);
 
         return new ValueExpression(token);
     }
@@ -167,6 +372,20 @@ public static class Parser
         };
     }
 
+    private static bool Match(
+    ReadOnlySpan<Token> tokens,
+    ref int position,
+    TokenType type)
+    {
+        if (position >= tokens.Length ||
+            tokens[position].Type != type)
+        {
+            return false;
+        }
+
+        position++;
+        return true;
+    }
     private static IdentifierExpression ParseIdentifier(
         ReadOnlySpan<Token> tokens,
         ref int position)
@@ -186,19 +405,35 @@ public static class Parser
         return new LogicalExpression(left, op, right);
     }
     private static BaseExpression ParseComparison(
-        ReadOnlySpan<char> source,
-        ReadOnlySpan<Token> tokens,
-        ref int position)
+    ReadOnlySpan<char> source,
+    ReadOnlySpan<Token> tokens,
+    ref int position)
     {
-        var left = ParsePrimary(source, tokens, ref position);
+        var left = ParsePostfix(
+            source,
+            tokens,
+            ref position);
+
         if (position >= tokens.Length ||
             tokens[position].Type != TokenType.ComparisonOperator)
         {
             return left;
         }
-        var op = MatchComparisonOperator(source, tokens, ref position);
-        var right = ParsePrimary(source, tokens, ref position);
-        return new ComparisonExpression(left, op, right);
+
+        var op = MatchComparisonOperator(
+            source,
+            tokens,
+            ref position);
+
+        var right = ParsePostfix(
+            source,
+            tokens,
+            ref position);
+
+        return new ComparisonExpression(
+            left,
+            op,
+            right);
     }
     private static ComparisonOperator MatchComparisonOperator(
         ReadOnlySpan<char> source,
@@ -224,19 +459,6 @@ public static class Parser
                 $"Operator '{value.ToString()}' is not implemented.")
         };
     }
-
-    private static BaseExpression ParseStringLiteral(
-        ReadOnlySpan<Token> tokens,
-        ref int position)
-    {
-        var token = Consume(
-            tokens,
-            ref position,
-            TokenType.StringLiteral);
-
-        return new ValueExpression(token);
-    }
-
     private static Token Consume(
         ReadOnlySpan<Token> tokens,
         ref int position,
