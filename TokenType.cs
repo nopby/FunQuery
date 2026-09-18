@@ -10,5 +10,11 @@ public enum TokenType
     ComparisonOperator,
     LogicalOperator,
     Function,
-    Dot
+    Dot,
+    OpenSquareParenthesis,
+    CloseSquareParenthesis,
+    OpenCurlyParenthesis,
+    CloseCurlyParenthesis,
+    Comma,
+    Colon
 }

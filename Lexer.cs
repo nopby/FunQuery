@@ -88,14 +88,14 @@ class Lexer
                 case '(':
                     tokenBuffer.Add(new Token(
                         TokenType.OpenRoundParenthesis,
-                        position++,
-                        position));
+                        position,
+                        ++position));
                     break;
                 case ')':
                     tokenBuffer.Add(new Token(
                         TokenType.CloseRoundParenthesis,
-                        position++,
-                        position));
+                        position,
+                        ++position));
                     break;
                 case '.':
                     tokenBuffer.Add(new Token(
@@ -103,7 +103,42 @@ class Lexer
                         position,
                         ++position));
                     break;
-
+                case '[':
+                    tokenBuffer.Add(new Token(
+                        TokenType.OpenSquareParenthesis,
+                        position,
+                        ++position));
+                    break;
+                case ']':
+                    tokenBuffer.Add(new Token(
+                        TokenType.CloseSquareParenthesis,
+                        position,
+                        ++position));
+                    break;
+                case '{':
+                    tokenBuffer.Add(new Token(
+                        TokenType.OpenCurlyParenthesis,
+                        position,
+                        ++position));
+                    break;
+                case '}':
+                    tokenBuffer.Add(new Token(
+                        TokenType.CloseCurlyParenthesis,
+                        position,
+                        ++position));
+                    break;
+                case ',':
+                    tokenBuffer.Add(new Token(
+                        TokenType.Comma,
+                        position,
+                        ++position));
+                    break;
+                case ':':
+                    tokenBuffer.Add(new Token(
+                        TokenType.Colon,
+                        position,
+                        ++position));
+                    break;
                 default:
                     throw new Exception(
                         $"Unexpected character '{c}' at position {position}.");
@@ -131,10 +166,11 @@ class Lexer
     private static bool IsFunctionStart(char c) => c == '$';
     private static bool IsFunction(
         ReadOnlySpan<char> value) =>
-        value.Equals("filter", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("select", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("skip", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("groupby", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("order", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("take", StringComparison.OrdinalIgnoreCase);
+        value.Equals("$filter", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("$select", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("$skip", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("$groupby", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("$order", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("$take", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("$source", StringComparison.OrdinalIgnoreCase);
 }
