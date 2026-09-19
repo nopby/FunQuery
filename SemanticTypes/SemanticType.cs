@@ -1,6 +1,9 @@
 ﻿namespace Console.SemanticTypes;
 
-public abstract record SemanticType;
+public abstract record SemanticType
+{
+    public abstract string Name { get; }
+}
 
 
 public static class SemanticTypeOptions
@@ -25,4 +28,10 @@ public static class SemanticTypeOptions
         new DoubleType();
     public static readonly SemanticType Unknown =
         new UnknownType();
+    public static readonly SemanticType Void =
+        new VoidType();
+    public static readonly SemanticType AnyType =
+        new AnyType();
+    public static SemanticType Array(SemanticType type) =>
+        new ArrayType(type);
 }

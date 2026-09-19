@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Console.SemanticTypes;
 
-public sealed record FloatType : SemanticType
+public sealed record VoidType : SemanticType
 {
-    public override string Name => "float";
+    public override string Name => "void";
 }

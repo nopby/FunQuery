@@ -1,4 +1,6 @@
-﻿namespace Console;
+﻿using Console.SemanticTypes;
+
+namespace Console;
 
 public sealed class ParameterDefinition
 {

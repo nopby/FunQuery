@@ -16,7 +16,7 @@ class Lexer
                 continue;
             }
 
-            if (IsFunctionStart(c))
+            if (IsCallStart(c))
             {
                 int startPosition = position++;
                 while (position < text.Length &&
@@ -26,14 +26,14 @@ class Lexer
                 }
                 var value = text[startPosition..position];
 
-                if (!IsFunction(value))
+                if (!IsCall(value))
                 {
                     throw new Exception(
                         $"Unknown function '{value.ToString()}'.");
                 }
 
                 tokenBuffer.Add(new Token(
-                    TokenType.Function,
+                    TokenType.Call,
                     startPosition,
                     position));
 
@@ -204,8 +204,8 @@ class Lexer
     private static bool IsLogicalOperator(ReadOnlySpan<char> value) =>
         value.Equals("or", StringComparison.OrdinalIgnoreCase)
         || value.Equals("and", StringComparison.OrdinalIgnoreCase);
-    private static bool IsFunctionStart(char c) => c == '$';
-    private static bool IsFunction(
+    private static bool IsCallStart(char c) => c == '$';
+    private static bool IsCall(
         ReadOnlySpan<char> value) =>
         value.Equals("$filter", StringComparison.OrdinalIgnoreCase)
         || value.Equals("$select", StringComparison.OrdinalIgnoreCase)

@@ -8,7 +8,7 @@ public enum TokenType
     CloseRoundParenthesis,
     ComparisonOperator,
     LogicalOperator,
-    Function,
+    Call,
     Dot,
     OpenSquareParenthesis,
     CloseSquareParenthesis,

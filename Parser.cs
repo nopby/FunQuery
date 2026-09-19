@@ -111,7 +111,7 @@ public static class Parser
             var function = Consume(
                 tokens,
                 ref position,
-                TokenType.Function);
+                TokenType.Call);
 
             var arguments = ParseFunctionArguments(
                 source,
@@ -154,7 +154,7 @@ public static class Parser
             TokenType.FloatLiteral => ParseValue(tokens, TokenType.FloatLiteral, ref position),
             TokenType.LongLiteral => ParseValue(tokens, TokenType.LongLiteral, ref position),
             TokenType.OpenRoundParenthesis => ParseGroupedExpression(source, tokens, ref position),
-            TokenType.Function => ParseFunction(source, tokens, ref position),
+            TokenType.Call => ParseFunction(source, tokens, ref position),
             TokenType.OpenSquareParenthesis => ParseArray(source, tokens, ref position),
             TokenType.OpenCurlyParenthesis => ParseBlock(source, tokens, ref position),
             _ => throw new Exception($"Expected expression, got {tokens[position].Type}.")
@@ -252,22 +252,16 @@ public static class Parser
 
         return expression;
     }
-    private static BaseExpression ParseFunction(ReadOnlySpan<char> source, ReadOnlySpan<Token> tokens,  ref int position)
+    private static BaseExpression ParseFunction(
+    ReadOnlySpan<char> source,
+    ReadOnlySpan<Token> tokens,
+    ref int position)
     {
-        var function = Consume(
-        tokens,
-        ref position,
-        TokenType.Function);
+        var function = Consume(tokens, ref position, TokenType.Call);
 
-        var arguments = ParseFunctionArguments(
-        source,
-        tokens,
-        ref position);
+        var arguments = ParseFunctionArguments(source, tokens, ref position);
 
-
-        return new FunctionExpression(
-            function,
-            arguments);
+        return new CallExpression(null, function, arguments);
     }
     private static IReadOnlyList<BaseExpression> ParseFunctionArguments(
     ReadOnlySpan<char> source,

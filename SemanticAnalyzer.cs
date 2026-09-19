@@ -202,127 +202,99 @@ public static class SemanticAnalyzer
     }
 
     private static CallExpression AnalyzeCall(
-        CallExpression expression,
-        SemanticContext context)
+    CallExpression expression,
+    SemanticContext context)
     {
-        // Analyze target terlebih dahulu.
+        // 1. Analyze target lebih dulu (kalau ada)
         if (expression.Target is not null)
+            Analyze(expression.Target, context);
+
+        // 2. Resolve fungsi
+        var functionName = context.GetFunctionName(expression.Function);
+
+        var function = context.ResolveFunction(functionName)
+            ?? throw new SemanticException($"Unknown function '{functionName}'.");
+
+        // 3. Validasi target sebelum argumen, karena scope argumen bergantung pada tipe target
+        ValidateTarget(expression, function);
+
+        var targetType = expression.Target?.SemanticType;
+
+        // 4. Analyze argumen (di dalam scope field elemen kalau fungsi membutuhkannya)
+        if (function.UsesElementScope)
         {
-            Analyze(
-                expression.Target,
-                context);
+            if (targetType is not ArrayType { Type: ObjectType element })
+            {
+                throw new SemanticException(
+                    $"Function '{function.Name}' requires an array of objects as target.");
+            }
+
+            using (context.EnterScope(element.Fields))
+            {
+                foreach (var argument in expression.Arguments)
+                    Analyze(argument, context);
+            }
+        }
+        else
+        {
+            foreach (var argument in expression.Arguments)
+                Analyze(argument, context);
         }
 
-        // Analyze arguments.
-        foreach (var argument in expression.Arguments)
-        {
-            Analyze(
-                argument,
-                context);
-        }
+        // 5. Validasi jumlah dan tipe argumen
+        ValidateArguments(expression, function);
 
-        var functionName =
-            context.GetFunctionName(
-                expression.Function);
+        // 6. Hitung tipe hasil (overload dua parameter!)
+        var argumentTypes = expression.Arguments
+            .Select(a => a.SemanticType!)
+            .ToList();
 
-        var function =
-            context.ResolveFunction(
-                functionName);
-
-        if (function is null)
-        {
-            throw new SemanticException(
-                $"Unknown function '{functionName}'.");
-        }
-
-        ValidateArguments(
-            expression,
-            function);
-
-        ValidateTarget(
-            expression,
-            function);
-
-        var targetType =
-            expression.Target?.SemanticType;
-
-        expression.SemanticType =
-            function.GetReturnType(
-                targetType);
+        expression.SemanticType = function.GetReturnType(targetType, argumentTypes);
 
         return expression;
     }
 
-    private static void ValidateArguments(
-        CallExpression expression,
-        FunctionDefinition function)
+    private static void ValidateArguments(CallExpression expression, FunctionDefinition function)
     {
-        if (expression.Arguments.Count <
-            function.RequiredArgumentCount)
-        {
+        if (expression.Arguments.Count < function.MinArguments)
             throw new SemanticException(
-                $"Function '{function.Name}' " +
-                $"requires at least " +
-                $"{function.RequiredArgumentCount} argument(s).");
-        }
+                $"Function '{function.Name}' requires at least {function.MinArguments} argument(s).");
 
-        if (!function.IsVariadic &&
-            expression.Arguments.Count >
-            function.Parameters.Count)
-        {
+        if (!function.IsVariadic && expression.Arguments.Count > function.Parameters.Count)
             throw new SemanticException(
-                $"Function '{function.Name}' " +
-                $"accepts at most " +
-                $"{function.Parameters.Count} argument(s).");
-        }
+                $"Function '{function.Name}' accepts at most {function.Parameters.Count} argument(s).");
 
-        for (int i = 0;
-             i < expression.Arguments.Count;
-             i++)
+        for (int i = 0; i < expression.Arguments.Count; i++)
         {
-            var argument =
-                expression.Arguments[i];
+            var parameter = function.Parameters[Math.Min(i, function.Parameters.Count - 1)];
 
-            var parameter =
-                function.Parameters[i];
-
-            var argumentType =
-                argument.SemanticType
+            var argumentType = expression.Arguments[i].SemanticType
                 ?? throw new SemanticException(
-                    $"Argument {i + 1} of " +
-                    $"'{function.Name}' has no semantic type.");
+                    $"Argument {i + 1} of '{function.Name}' has no semantic type.");
 
-            if (!parameter.Accepts(argumentType))
-            {
+            if (!parameter.Accepts(argumentType.GetType()))
                 throw new SemanticException(
-                    $"Argument {i + 1} of " +
-                    $"'{function.Name}' expects " +
-                    $"{parameter.Type.Name}, " +
-                    $"got {argumentType.Name}.");
-            }
+                    $"Argument {i + 1} of '{function.Name}' expects {parameter.Type.Name}, got {argumentType.Name}.");
         }
     }
 
-    private static void ValidateTarget(
-        CallExpression expression,
-        FunctionDefinition function)
+    private static void ValidateTarget(CallExpression expression, FunctionDefinition function)
     {
         if (expression.Target is null)
+        {
+            if (function.RequiresTarget)
+                throw new SemanticException(
+                    $"Function '{function.Name}' must be called on a target.");
             return;
+        }
 
-        var targetType =
-            expression.Target.SemanticType
+        var targetType = expression.Target.SemanticType
             ?? throw new SemanticException(
-                $"Target of '{function.Name}' " +
-                "has no semantic type.");
+                $"Target of '{function.Name}' has no semantic type.");
 
         if (!function.AcceptsTarget(targetType))
-        {
             throw new SemanticException(
-                $"Function '{function.Name}' " +
-                $"cannot be called on " +
-                $"{targetType.Name}.");
-        }
+                $"Function '{function.Name}' cannot be called on {targetType.Name}.");
     }
 
     private static SemanticType GetValueType(

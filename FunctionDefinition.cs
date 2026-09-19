@@ -8,13 +8,36 @@ public sealed class FunctionDefinition
 
     public required IReadOnlyList<ParameterDefinition> Parameters { get; init; }
 
-    public int RequiredArgumentCount { get; init; }
+    // Default: dihitung dari Parameters, bisa di-override
+    public int RequiredArgumentCount { get; init; } = -1;
+    public int MinArguments =>
+        RequiredArgumentCount >= 0
+            ? RequiredArgumentCount
+            : Parameters.Count(p => p.Required);
 
     public bool IsVariadic { get; init; }
 
-    public Func<Type?, Type> ReturnType { get; init; } =
-        _ => typeof(object);
+    // Baru: argumen dianalisis di dalam scope field elemen target
+    public bool UsesElementScope { get; init; }
+
+    // Baru: fungsi ini wajib dipanggil dengan target (x.$filter(...))
+    public bool RequiresTarget { get; init; }
+
+    public Func<SemanticType?, SemanticType> ReturnType { get; init; } =
+        _ => SemanticTypeOptions.Unknown;
+
+    // Baru: dipakai jika return type bergantung pada argumen (mis. $source)
+    public Func<SemanticType?, IReadOnlyList<SemanticType>, SemanticType>?
+    ReturnTypeFromArguments
+    { get; init; }
 
     public Func<SemanticType?, bool> AcceptsTarget { get; init; } =
         _ => true;
+
+    public SemanticType GetReturnType(SemanticType? type) => ReturnType(type);
+
+    public SemanticType GetReturnType(
+    SemanticType? target,
+    IReadOnlyList<SemanticType> arguments) =>
+    ReturnTypeFromArguments?.Invoke(target, arguments) ?? ReturnType(target);
 }

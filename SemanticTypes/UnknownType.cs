@@ -1,4 +1,7 @@
 ﻿namespace Console.SemanticTypes;
 
 
-public sealed record UnknownType : SemanticType;
+public sealed record UnknownType : SemanticType
+{
+    public override string Name => "unknown";
+}
