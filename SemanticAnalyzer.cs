@@ -2,6 +2,7 @@
 using Console.SemanticTypes;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 
 namespace Console;
@@ -49,7 +50,7 @@ public static class SemanticAnalyzer
         SemanticContext context)
     {
         expression.SemanticType =
-            GetValueType(expression);
+            GetValueType(expression, context);
 
         return expression;
     }
@@ -298,31 +299,47 @@ public static class SemanticAnalyzer
     }
 
     private static SemanticType GetValueType(
-        ValueExpression expression)
+        ValueExpression expression,
+        SemanticContext context)
     {
         return expression.Token.Type switch
         {
             TokenType.StringLiteral =>
                 SemanticTypeOptions.String,
 
-            TokenType.IntegerLiteral =>
-                SemanticTypeOptions.Int,
-
-            TokenType.LongLiteral =>
-                SemanticTypeOptions.Long,
-
-            TokenType.FloatLiteral =>
-                SemanticTypeOptions.Float,
-
-            TokenType.DoubleLiteral =>
-                SemanticTypeOptions.Double,
-
-            TokenType.DecimalLiteral =>
-                SemanticTypeOptions.Decimal,
+            TokenType.Number => ResolveNumberType(expression, context),
 
             _ => throw new SemanticException(
                 $"Unsupported literal type: " +
                 $"{expression.Token.Type}.")
         };
+    }
+    private static SemanticType ResolveNumberType(
+    ValueExpression expression,
+    SemanticContext context)
+    {
+        var text = context.GetText(expression.Token);
+
+        if (text.Contains('.'))
+        {
+            if (decimal.TryParse(text, NumberStyles.AllowDecimalPoint,
+                    CultureInfo.InvariantCulture, out _))
+                return SemanticTypeOptions.Decimal;
+
+            throw new SemanticException($"Number '{text}' is out of range.");
+        }
+
+        if (int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out _))
+            return SemanticTypeOptions.Int;
+
+        if (long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out _))
+            return SemanticTypeOptions.Long;
+
+        // Bilangan bulat di atas long masih muat sebagai decimal
+        if (decimal.TryParse(text, NumberStyles.None,
+                CultureInfo.InvariantCulture, out _))
+            return SemanticTypeOptions.Decimal;
+
+        throw new SemanticException($"Number '{text}' is out of range.");
     }
 }

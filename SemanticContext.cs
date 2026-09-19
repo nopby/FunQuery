@@ -28,7 +28,7 @@ public sealed class SemanticContext
     // Source text
     // ------------------------------------------------------------------
 
-    private string GetText(Token token) =>
+    public string GetText(Token token) =>
         _source.Span[token.StartPosition..token.EndPosition].ToString();
 
     public string GetFunctionName(Token token) => GetText(token);

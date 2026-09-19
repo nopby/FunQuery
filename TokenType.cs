@@ -16,12 +16,5 @@ public enum TokenType
     CloseCurlyParenthesis,
     Comma,
     Colon,
-    IntegerLiteral,
-    UIntLiteral,
-    LongLiteral,
-    ULongLiteral,
-
-    FloatLiteral,
-    DoubleLiteral,
-    DecimalLiteral,
+    Number
 }

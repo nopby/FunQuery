@@ -26,12 +26,6 @@ class Lexer
                 }
                 var value = text[startPosition..position];
 
-                if (!IsCall(value))
-                {
-                    throw new Exception(
-                        $"Unknown function '{value.ToString()}'.");
-                }
-
                 tokenBuffer.Add(new Token(
                     TokenType.Call,
                     startPosition,
@@ -65,36 +59,28 @@ class Lexer
             }
             if (IsNumber(c))
             {
-                int startValue = position++;
+                int start = position++;
 
-                while (position < text.Length &&
-                       IsNumber(text[position]))
+                while (position < text.Length && IsNumber(text[position]))
+                    position++;
+
+                // '.' dianggap bagian angka hanya bila diikuti digit,
+                // supaya tidak bentrok dengan chain seperti $take(1).$filter(...)
+                if (position + 1 < text.Length &&
+                    text[position] == '.' &&
+                    IsNumber(text[position + 1]))
                 {
                     position++;
+
+                    while (position < text.Length && IsNumber(text[position]))
+                        position++;
                 }
 
-                TokenType type = TokenType.IntegerLiteral;
+                // Menolak "2abc", "2m", "1.5f"
+                if (position < text.Length && IsIdentifierStart(text[position]))
+                    throw new Exception($"Invalid number at position {start}.");
 
-                if (position < text.Length &&
-                    IsNumberSuffix(text[position]))
-                {
-                    char suffix = text[position++];
-
-                    type = suffix switch
-                    {
-                        'l' or 'L' => TokenType.LongLiteral,
-                        'd' or 'D' => TokenType.DoubleLiteral,
-                        'm' or 'M' => TokenType.DecimalLiteral,
-                        'f' or 'F' => TokenType.FloatLiteral,
-                        _ => throw new UnreachableException()
-                    };
-                }
-
-                tokenBuffer.Add(new Token(
-                    type,
-                    startValue,
-                    position));
-
+                tokenBuffer.Add(new Token(TokenType.Number, start, position));
                 continue;
             }
             if (c == '\'')
@@ -189,11 +175,6 @@ class Lexer
         IsIdentifierStart(c)
         || c is >= '0' and <= '9';
     private static bool IsNumber(char c) => c is >= '0' and <= '9';
-    private static bool IsNumberSuffix(char c) =>
-        c is 'm' || c is 'M'
-        || c is 'd' || c is 'D'
-        || c is 'f' || c is 'F'
-        || c is 'l' || c is 'L';
     private static bool IsComparisonOperator(ReadOnlySpan<char> value) =>
         value.Equals("eq", StringComparison.OrdinalIgnoreCase)
         || value.Equals("gt", StringComparison.OrdinalIgnoreCase)
@@ -205,13 +186,4 @@ class Lexer
         value.Equals("or", StringComparison.OrdinalIgnoreCase)
         || value.Equals("and", StringComparison.OrdinalIgnoreCase);
     private static bool IsCallStart(char c) => c == '$';
-    private static bool IsCall(
-        ReadOnlySpan<char> value) =>
-        value.Equals("$filter", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("$select", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("$skip", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("$groupby", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("$order", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("$take", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("$source", StringComparison.OrdinalIgnoreCase);
 }

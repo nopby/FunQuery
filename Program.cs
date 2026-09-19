@@ -4,7 +4,7 @@
 using Console;
 using Console.SemanticTypes;
 
-string input = "$source([{id: 1, name: 'hello'}, {id: 2, name: 'world'}]).$filter(id eq 2)";
+string input = "$source([{id: 1, name: 'hello'}, {id: 2, name: 'world'}]).$filter(id eq 2.1)";
 
 using var tokenBuffer = new TokenBuffer();
 Lexer.Tokenize(tokenBuffer, input);
