@@ -124,10 +124,15 @@ public static class Parser
                 tokens,
                 ref position, ref guard);
 
+            var start = expression.Span.Start;
+
             expression = new CallExpression(
                 expression,
                 function,
-                arguments);
+                arguments)
+            {
+                Span = new SourceSpan(start, tokens[position - 1].EndPosition)
+            };
         }
 
         return expression;
@@ -215,7 +220,10 @@ public static class Parser
             tokens,
             ref position, ref guard);
 
-        return new NamedExpression(name, value);
+        return new NamedExpression(name, value)
+        {
+            Span = new SourceSpan(name.StartPosition, value.Span.End)
+        };
     }
 
     private static BlockExpression ParseBlock(
@@ -223,7 +231,7 @@ public static class Parser
     ReadOnlySpan<Token> tokens,
     ref int position, ref ParseGuard guard)
     {
-        Consume(tokens, ref position, TokenType.OpenCurlyParenthesis);
+        var open = Consume(tokens, ref position, TokenType.OpenCurlyParenthesis);
 
         List<BaseExpression> expressions = [];
 
@@ -243,12 +251,15 @@ public static class Parser
             break;
         }
 
-        Consume(
+        var close = Consume(
             tokens,
             ref position,
             TokenType.CloseCurlyParenthesis);
 
-        return new BlockExpression(expressions);
+        return new BlockExpression(expressions)
+        {
+            Span = new SourceSpan(open.StartPosition, close.EndPosition)
+        };
     }
     private static BaseExpression ParseGroupedExpression(ReadOnlySpan<char> source, ReadOnlySpan<Token> tokens, ref int position, ref ParseGuard guard)
     {
@@ -278,7 +289,10 @@ public static class Parser
 
         var arguments = ParseFunctionArguments(source, tokens, ref position, ref guard);
 
-        return new CallExpression(null, function, arguments);
+        return new CallExpression(null, function, arguments)
+        {
+            Span = new SourceSpan(function.StartPosition, tokens[position - 1].EndPosition)
+        };
     }
     private static IReadOnlyList<BaseExpression> ParseFunctionArguments(
     ReadOnlySpan<char> source,
@@ -330,12 +344,15 @@ public static class Parser
     ReadOnlySpan<Token> tokens,
     ref int position, ref ParseGuard guard)
     {
-        Consume(tokens, ref position, TokenType.OpenSquareParenthesis);
+        var open = Consume(tokens, ref position, TokenType.OpenSquareParenthesis);
 
         List<BaseExpression> elements = [];
 
         if (Match(tokens, ref position, TokenType.CloseSquareParenthesis))
-            return new ArrayExpression(elements);
+            return new ArrayExpression(elements)
+            {
+                Span = new SourceSpan(open.StartPosition, tokens[position - 1].EndPosition)
+            };
 
         while (true)
         {
@@ -348,7 +365,10 @@ public static class Parser
             Consume(tokens, ref position, TokenType.Comma);
         }
 
-        return new ArrayExpression(elements);
+        return new ArrayExpression(elements)
+            {
+                Span = new SourceSpan(open.StartPosition, tokens[position - 1].EndPosition)
+            };
     }
 
     private static BaseExpression ParseValue(
@@ -361,7 +381,7 @@ public static class Parser
             ref position,
             tokenType);
 
-        return new ValueExpression(token);
+        return new ValueExpression(token) { Span = SourceSpan.From(token) };
     }
     private static LogicalOperator MatchLogicalOperator(ReadOnlySpan<char> source,
         ReadOnlySpan<Token> tokens,
@@ -408,14 +428,17 @@ public static class Parser
             ref position,
             TokenType.Identifier);
 
-        return new IdentifierExpression(token);
+        return new IdentifierExpression(token) { Span = SourceSpan.From(token) };
     }
     private static BaseExpression ParseLogical(
         BaseExpression left,
         LogicalOperator op,
         BaseExpression right)
     {
-        return new LogicalExpression(left, op, right);
+        return new LogicalExpression(left, op, right)
+        {
+            Span = SourceSpan.Between(left.Span, right.Span)
+        };
     }
     private static BaseExpression ParseComparison(
     ReadOnlySpan<char> source,
@@ -446,7 +469,10 @@ public static class Parser
         return new ComparisonExpression(
             left,
             op,
-            right);
+            right)
+        {
+            Span = SourceSpan.Between(left.Span, right.Span)
+        };
     }
     private static ComparisonOperator MatchComparisonOperator(
         ReadOnlySpan<char> source,

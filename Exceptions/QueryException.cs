@@ -36,6 +36,12 @@ public sealed class QueryException : Exception
     {
     }
 
+    /// <summary>Posisi dan panjang diambil dari rentang.</summary>
+    public QueryException(QueryErrorCode code, string message, SourceSpan span)
+        : this(code, message, span.Start, span.Length)
+    {
+    }
+
     public QueryErrorCode Code { get; }
 
     /// <summary>Kode string stabil yang dikirim ke klien, mis. "UNKNOWN_FUNCTION".</summary>

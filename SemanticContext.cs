@@ -34,12 +34,13 @@ public sealed class SemanticContext
     // Kedalaman rekursi analyzer
     // ------------------------------------------------------------------
 
-    public void EnterNode()
+    public void EnterNode(BaseExpression expression)
     {
         if (++_depth > _maxDepth)
             throw new QueryException(
                 QueryErrorCode.MaxDepthExceeded,
-                $"Expression is nested deeper than {_maxDepth} levels.");
+                $"Expression is nested deeper than {_maxDepth} levels.",
+                expression.Span);
     }
 
     public void ExitNode() => _depth--;
@@ -144,11 +145,16 @@ public sealed class SemanticContext
 
             if (!AreCompatible(firstType, elementType))
             {
+                var message = firstType is ObjectType && elementType is ObjectType
+                    ? $"Array element at index {i} has different fields than the first element."
+                    : $"Array elements must have compatible types. " +
+                      $"Expected {firstType.Name}, " +
+                      $"got {elementType.Name} at index {i}.";
+
                 throw new QueryException(
                     QueryErrorCode.IncompatibleElementTypes,
-                    $"Array elements must have compatible types. " +
-                    $"Expected {firstType.Name}, " +
-                    $"got {elementType.Name} at index {i}.");
+                    message,
+                    expression.Elements[i].Span);
             }
         }
 

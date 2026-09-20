@@ -14,7 +14,7 @@ public static class SemanticAnalyzer
         BaseExpression expression,
         SemanticContext context)
     {
-        context.EnterNode();
+        context.EnterNode(expression);
 
         var result = AnalyzeCore(expression, context);
 
@@ -172,7 +172,8 @@ public static class SemanticAnalyzer
                 QueryErrorCode.TypeMismatch,
                 $"Cannot compare " +
                 $"{leftType.Name} with " +
-                $"{rightType.Name}.");
+                $"{rightType.Name}.",
+                expression.Span);
         }
 
         expression.SemanticType =
@@ -210,7 +211,8 @@ public static class SemanticAnalyzer
             throw new QueryException(
                 QueryErrorCode.TypeMismatch,
                 "Left side of logical expression " +
-                "must be Boolean.");
+                "must be Boolean.",
+                expression.Left.Span);
         }
 
         if (rightType is not BooleanType)
@@ -218,7 +220,8 @@ public static class SemanticAnalyzer
             throw new QueryException(
                 QueryErrorCode.TypeMismatch,
                 "Right side of logical expression " +
-                "must be Boolean.");
+                "must be Boolean.",
+                expression.Right.Span);
         }
 
         expression.SemanticType =
@@ -311,7 +314,8 @@ public static class SemanticAnalyzer
             if (!parameter.Accepts(argumentType.GetType()))
                 throw new QueryException(
                     QueryErrorCode.TypeMismatch,
-                    $"Argument {i + 1} of '{function.Name}' expects {parameter.Type.Name}, got {argumentType.Name}.");
+                    $"Argument {i + 1} of '{function.Name}' expects {parameter.Type.Name}, got {argumentType.Name}.",
+                    expression.Arguments[i].Span);
         }
     }
 
