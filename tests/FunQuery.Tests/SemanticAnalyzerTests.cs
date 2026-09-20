@@ -223,6 +223,7 @@ public class SemanticAnalyzerTests
     // ------------------------------------------------------------------
 
     [Fact]
+    [Trait("Temporary", "Removed with the global identifier mechanism in M3")]
     public void GlobalIdentifiers_AreVisibleInsideFilter()
     {
         var identifiers = QueryPipeline.Identifiers(("limit", SemanticTypeOptions.Int));
@@ -233,12 +234,14 @@ public class SemanticAnalyzerTests
     }
 
     [Fact]
+    [Trait("Temporary", "Removed with the global identifier mechanism in M3")]
     public void GlobalIdentifier_IsUnknownUntilItIsRegistered()
     {
         AssertFails(QueryErrorCode.UnknownIdentifier, Filter("id lt limit"));
     }
 
     [Fact]
+    [Trait("Temporary", "Removed with the global identifier mechanism in M3")]
     public void ElementFields_ShadowGlobalIdentifiers()
     {
         var identifiers = QueryPipeline.Identifiers(
@@ -253,6 +256,7 @@ public class SemanticAnalyzerTests
     }
 
     [Fact]
+    [Trait("Temporary", "Removed with the global identifier mechanism in M3")]
     public void GlobalIdentifier_CanFeedAnObjectField()
     {
         var identifiers = QueryPipeline.Identifiers(("limit", SemanticTypeOptions.Int));

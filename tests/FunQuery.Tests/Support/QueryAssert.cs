@@ -1,4 +1,3 @@
-using System.Reflection;
 using FunQuery.Enums;
 
 namespace FunQuery.Tests.Support;
@@ -12,25 +11,23 @@ internal static class QueryAssert
     public static QueryException Fails(QueryErrorCode expected, Action action)
     {
         var exception = Assert.ThrowsAny<QueryException>(action);
-        Assert.Equal(expected, CodeOf(exception));
+        Assert.Equal(expected, exception.Code);
         return exception;
     }
 
-    // The error code is located by type rather than by property name, so these tests do not
-    // depend on how QueryException names it. If it is called 'Code', this can be simplified
-    // to 'exception.Code'.
-    private static QueryErrorCode CodeOf(QueryException exception)
+    /// <summary>
+    /// Like <see cref="Fails(QueryErrorCode, Action)"/>, and also checks where the error is reported:
+    /// the start <paramref name="position"/> and the <paramref name="length"/> of the offending input.
+    /// </summary>
+    public static QueryException Fails(
+        QueryErrorCode expected,
+        int position,
+        int length,
+        Action action)
     {
-        var property = typeof(QueryException)
-            .GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .FirstOrDefault(p => p.PropertyType == typeof(QueryErrorCode));
-
-        if (property is null)
-        {
-            throw new InvalidOperationException(
-                "QueryException has no property of type QueryErrorCode.");
-        }
-
-        return (QueryErrorCode)property.GetValue(exception)!;
+        var exception = Fails(expected, action);
+        Assert.Equal(position, exception.Position);
+        Assert.Equal(length, exception.Length);
+        return exception;
     }
 }
