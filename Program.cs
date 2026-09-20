@@ -6,9 +6,12 @@ using FunQuery.SemanticTypes;
 
 string input = "$source([{id: 1, name: 'hello'}, {id: 2, name: 'world'}]).$filter(id eq 2.1)";
 
-using var tokenBuffer = new TokenBuffer();
+// Batas keamanan. Semua nilai opsional, default: 2048 karakter, 1024 token, kedalaman 64.
+var limits = new QueryLimits();
+
+using var tokenBuffer = new TokenBuffer(limits: limits);
 Lexer.Tokenize(tokenBuffer, input);
-var parsed = Parser.Parse(input, tokenBuffer.Span);
+var parsed = Parser.Parse(input, tokenBuffer.Span, limits);
 
 var identifier = new Dictionary<string, SemanticType>
 {
@@ -39,5 +42,5 @@ var functions = new Dictionary<string, FunctionDefinition>
     },
 };
 
-var semanticContext = new SemanticContext(input.AsMemory(), identifier, functions);
+var semanticContext = new SemanticContext(input.AsMemory(), identifier, functions, limits);
 var result = SemanticAnalyzer.Analyze(parsed, semanticContext);

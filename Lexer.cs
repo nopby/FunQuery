@@ -7,6 +7,17 @@ class Lexer
 {
     public static void Tokenize(TokenBuffer tokenBuffer, ReadOnlySpan<char> text)
     {
+        var maxLength = tokenBuffer.Limits.MaxInputLength;
+
+        if (text.Length > maxLength)
+        {
+            throw new QueryException(
+                QueryErrorCode.InputTooLong,
+                $"Expression is longer than {maxLength} characters.",
+                maxLength,
+                text.Length - maxLength);
+        }
+
         int position = 0;
         while (position < text.Length)
         {
@@ -80,7 +91,8 @@ class Lexer
                 if (position < text.Length && IsIdentifierStart(text[position]))
                     throw new QueryException(
                         QueryErrorCode.InvalidNumber,
-                        $"Invalid number at position {start}.");
+                        "Invalid number.",
+                        start, position - start + 1);
 
                 tokenBuffer.Add(new Token(TokenType.Number, start, position));
                 continue;
@@ -98,7 +110,7 @@ class Lexer
                 if (position >= text.Length)
                     throw new QueryException(
                         QueryErrorCode.UnterminatedString,
-                        "Unterminated string literal.");
+                        $"Unterminated string literal at position {start}.");
 
                 position++;
 

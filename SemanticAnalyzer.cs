@@ -14,6 +14,19 @@ public static class SemanticAnalyzer
         BaseExpression expression,
         SemanticContext context)
     {
+        context.EnterNode();
+
+        var result = AnalyzeCore(expression, context);
+
+        context.ExitNode();
+
+        return result;
+    }
+
+    private static BaseExpression AnalyzeCore(
+        BaseExpression expression,
+        SemanticContext context)
+    {
         return expression switch
         {
             ValueExpression value =>

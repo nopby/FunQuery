@@ -7,14 +7,16 @@ public static class Parser
 {
     public static BaseExpression Parse(
         ReadOnlySpan<char> source,
-        ReadOnlySpan<Token> tokens)
+        ReadOnlySpan<Token> tokens,
+        QueryLimits? limits = null)
     {
         int position = 0;
+        var guard = new ParseGuard((limits ?? QueryLimits.Default).MaxDepth);
 
         var expression = ParseExpression(
             source,
             tokens,
-            ref position);
+            ref position, ref guard);
 
         if (position < tokens.Length)
         {
@@ -22,24 +24,27 @@ public static class Parser
 
             throw new QueryException(
                 QueryErrorCode.UnexpectedToken,
-                $"Unexpected token at {token.StartPosition}.");
+                "Unexpected token.",
+                token);
         }
 
         return expression;
     }
+    private static int EndOfInput(ReadOnlySpan<Token> tokens) =>
+    tokens.Length == 0 ? 0 : tokens[^1].EndPosition;
     private static BaseExpression ParseOr(
         ReadOnlySpan<char> source,
         ReadOnlySpan<Token> tokens,
-        ref int position)
+        ref int position, ref ParseGuard guard)
     {
-        var left = ParseAnd(source, tokens, ref position);
+        var left = ParseAnd(source, tokens, ref position, ref guard);
 
         while (position < tokens.Length &&
                IsLogicalOperator(source, tokens[position], "or"))
         {
             MatchLogicalOperator(source, tokens, ref position);
 
-            var right = ParseAnd(source, tokens, ref position);
+            var right = ParseAnd(source, tokens, ref position, ref guard);
 
             left = ParseLogical(
                 left,
@@ -52,12 +57,12 @@ public static class Parser
     private static BaseExpression ParseAnd(
         ReadOnlySpan<char> source,
         ReadOnlySpan<Token> tokens,
-        ref int position)
+        ref int position, ref ParseGuard guard)
     {
         var left = ParseComparison(
         source,
         tokens,
-        ref position);
+        ref position, ref guard);
 
         while (position < tokens.Length &&
                IsLogicalOperator(
@@ -73,7 +78,7 @@ public static class Parser
             var right = ParseComparison(
                 source,
                 tokens,
-                ref position);
+                ref position, ref guard);
 
             left = ParseLogical(
                 left,
@@ -97,12 +102,12 @@ public static class Parser
     private static BaseExpression ParsePostfix(
     ReadOnlySpan<char> source,
     ReadOnlySpan<Token> tokens,
-    ref int position)
+    ref int position, ref ParseGuard guard)
     {
         var expression = ParsePrimary(
             source,
             tokens,
-            ref position);
+            ref position, ref guard);
 
         while (Match(
             tokens,
@@ -117,7 +122,7 @@ public static class Parser
             var arguments = ParseFunctionArguments(
                 source,
                 tokens,
-                ref position);
+                ref position, ref guard);
 
             expression = new CallExpression(
                 expression,
@@ -130,19 +135,29 @@ public static class Parser
     private static BaseExpression ParseExpression(
         ReadOnlySpan<char> source,
         ReadOnlySpan<Token> tokens,
-        ref int position)
+        ref int position, ref ParseGuard guard)
     {
-        return ParseOr(source, tokens, ref position);
+        guard.Enter(
+            position < tokens.Length
+                ? tokens[position].StartPosition
+                : (tokens.Length == 0 ? 0 : tokens[^1].EndPosition));
+
+        var expression = ParseOr(source, tokens, ref position, ref guard);
+
+        guard.Exit();
+
+        return expression;
     }
     private static BaseExpression ParsePrimary(
         ReadOnlySpan<char> source, 
         ReadOnlySpan<Token> tokens, 
-        ref int position)
+        ref int position, ref ParseGuard guard)
     {
         if (position >= tokens.Length)
             throw new QueryException(
                 QueryErrorCode.UnexpectedEndOfInput,
-                "Expected expression, but reached end of input");
+                "Expected expression, but reached end of input.",
+                EndOfInput(tokens), 0);
 
         return tokens[position].Type switch
         {
@@ -150,12 +165,12 @@ public static class Parser
             TokenType.Identifier => ParseIdentifierOrNamed(
                 source,
                 tokens,
-                ref position),
+                ref position, ref guard),
             TokenType.Number => ParseValue(tokens, TokenType.Number, ref position),
-            TokenType.OpenRoundParenthesis => ParseGroupedExpression(source, tokens, ref position),
-            TokenType.Call => ParseFunction(source, tokens, ref position),
-            TokenType.OpenSquareParenthesis => ParseArray(source, tokens, ref position),
-            TokenType.OpenCurlyParenthesis => ParseBlock(source, tokens, ref position),
+            TokenType.OpenRoundParenthesis => ParseGroupedExpression(source, tokens, ref position, ref guard),
+            TokenType.Call => ParseFunction(source, tokens, ref position, ref guard),
+            TokenType.OpenSquareParenthesis => ParseArray(source, tokens, ref position, ref guard),
+            TokenType.OpenCurlyParenthesis => ParseBlock(source, tokens, ref position, ref guard),
             _ => throw new QueryException(
                 QueryErrorCode.UnexpectedToken,
                 $"Expected expression, got {tokens[position].Type}.")
@@ -164,7 +179,7 @@ public static class Parser
     private static BaseExpression ParseIdentifierOrNamed(
     ReadOnlySpan<char> source,
     ReadOnlySpan<Token> tokens,
-    ref int position)
+    ref int position, ref ParseGuard guard)
     {
         if (position + 1 < tokens.Length &&
             tokens[position + 1].Type == TokenType.Colon)
@@ -172,7 +187,7 @@ public static class Parser
             return ParseNamed(
                 source,
                 tokens,
-                ref position);
+                ref position, ref guard);
         }
 
         return ParseIdentifier(
@@ -182,7 +197,7 @@ public static class Parser
     private static NamedExpression ParseNamed(
     ReadOnlySpan<char> source,
     ReadOnlySpan<Token> tokens,
-    ref int position)
+    ref int position, ref ParseGuard guard)
     {
         var name = Consume(
         tokens,
@@ -197,7 +212,7 @@ public static class Parser
         var value = ParseExpression(
             source,
             tokens,
-            ref position);
+            ref position, ref guard);
 
         return new NamedExpression(name, value);
     }
@@ -205,7 +220,7 @@ public static class Parser
     private static BlockExpression ParseBlock(
     ReadOnlySpan<char> source,
     ReadOnlySpan<Token> tokens,
-    ref int position)
+    ref int position, ref ParseGuard guard)
     {
         Consume(tokens, ref position, TokenType.OpenCurlyParenthesis);
 
@@ -215,7 +230,7 @@ public static class Parser
                tokens[position].Type != TokenType.CloseCurlyParenthesis)
         {
             expressions.Add(
-                ParseExpression(source, tokens, ref position));
+                ParseExpression(source, tokens, ref position, ref guard));
 
             if (position < tokens.Length &&
                 tokens[position].Type == TokenType.Comma)
@@ -234,7 +249,7 @@ public static class Parser
 
         return new BlockExpression(expressions);
     }
-    private static BaseExpression ParseGroupedExpression(ReadOnlySpan<char> source, ReadOnlySpan<Token> tokens, ref int position)
+    private static BaseExpression ParseGroupedExpression(ReadOnlySpan<char> source, ReadOnlySpan<Token> tokens, ref int position, ref ParseGuard guard)
     {
         Consume(
         tokens,
@@ -244,7 +259,7 @@ public static class Parser
         var expression = ParseExpression(
         source,
         tokens,
-        ref position);
+        ref position, ref guard);
 
         Consume(
             tokens,
@@ -256,18 +271,18 @@ public static class Parser
     private static BaseExpression ParseFunction(
     ReadOnlySpan<char> source,
     ReadOnlySpan<Token> tokens,
-    ref int position)
+    ref int position, ref ParseGuard guard)
     {
         var function = Consume(tokens, ref position, TokenType.Call);
 
-        var arguments = ParseFunctionArguments(source, tokens, ref position);
+        var arguments = ParseFunctionArguments(source, tokens, ref position, ref guard);
 
         return new CallExpression(null, function, arguments);
     }
     private static IReadOnlyList<BaseExpression> ParseFunctionArguments(
     ReadOnlySpan<char> source,
     ReadOnlySpan<Token> tokens,
-    ref int position)
+    ref int position, ref ParseGuard guard)
     {
         Consume(
             tokens,
@@ -290,7 +305,7 @@ public static class Parser
                 ParseExpression(
                     source,
                     tokens,
-                    ref position));
+                    ref position, ref guard));
 
             if (Match(
                 tokens,
@@ -312,7 +327,7 @@ public static class Parser
     private static ArrayExpression ParseArray(
     ReadOnlySpan<char> source,
     ReadOnlySpan<Token> tokens,
-    ref int position)
+    ref int position, ref ParseGuard guard)
     {
         Consume(tokens, ref position, TokenType.OpenSquareParenthesis);
 
@@ -324,7 +339,7 @@ public static class Parser
         while (true)
         {
             elements.Add(
-                ParseExpression(source, tokens, ref position));
+                ParseExpression(source, tokens, ref position, ref guard));
 
             if (Match(tokens, ref position, TokenType.CloseSquareParenthesis))
                 break;
@@ -403,12 +418,12 @@ public static class Parser
     private static BaseExpression ParseComparison(
     ReadOnlySpan<char> source,
     ReadOnlySpan<Token> tokens,
-    ref int position)
+    ref int position, ref ParseGuard guard)
     {
         var left = ParsePostfix(
             source,
             tokens,
-            ref position);
+            ref position, ref guard);
 
         if (position >= tokens.Length ||
             tokens[position].Type != TokenType.ComparisonOperator)
@@ -424,7 +439,7 @@ public static class Parser
         var right = ParsePostfix(
             source,
             tokens,
-            ref position);
+            ref position, ref guard);
 
         return new ComparisonExpression(
             left,

@@ -15,15 +15,34 @@ public sealed class SemanticContext
     // Enumerasi Stack<T> dimulai dari elemen paling atas (scope terdalam).
     private readonly Stack<IReadOnlyDictionary<string, SemanticType>> _scopes = new();
 
+    private readonly int _maxDepth;
+    private int _depth;
+
     public SemanticContext(
         ReadOnlyMemory<char> source,
         IReadOnlyDictionary<string, SemanticType> identifiers,
-        IReadOnlyDictionary<string, FunctionDefinition> functions)
+        IReadOnlyDictionary<string, FunctionDefinition> functions,
+        QueryLimits? limits = null)
     {
         _source = source;
         _identifiers = identifiers;
         _functions = functions;
+        _maxDepth = (limits ?? QueryLimits.Default).MaxDepth;
     }
+
+    // ------------------------------------------------------------------
+    // Kedalaman rekursi analyzer
+    // ------------------------------------------------------------------
+
+    public void EnterNode()
+    {
+        if (++_depth > _maxDepth)
+            throw new QueryException(
+                QueryErrorCode.MaxDepthExceeded,
+                $"Expression is nested deeper than {_maxDepth} levels.");
+    }
+
+    public void ExitNode() => _depth--;
 
     // ------------------------------------------------------------------
     // Source text

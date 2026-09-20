@@ -1,19 +1,34 @@
-﻿using System.Buffers;
+﻿using FunQuery.Enums;
+using System.Buffers;
 
 namespace FunQuery;
 
 public sealed class TokenBuffer : IDisposable
 {
     private Token[] _array;
+    private readonly int _maxTokens;
+
     public int Count { get; private set; }
 
-    public TokenBuffer(int capacity = 16)
+    public QueryLimits Limits { get; }
+
+    public TokenBuffer(int capacity = 16, QueryLimits? limits = null)
     {
-        _array = ArrayPool<Token>.Shared.Rent(capacity);
+        Limits = limits ?? QueryLimits.Default;
+        _maxTokens = Limits.MaxTokens;
+        _array = ArrayPool<Token>.Shared.Rent(Math.Max(1, Math.Min(capacity, _maxTokens)));
     }
 
     public void Add(Token token)
     {
+        if (Count >= _maxTokens)
+        {
+            throw new QueryException(
+                QueryErrorCode.TooManyTokens,
+                $"Expression has more than {_maxTokens} tokens.",
+                token);
+        }
+
         if (Count == _array.Length)
             Grow();
 
