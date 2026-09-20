@@ -176,11 +176,77 @@ public static class SemanticAnalyzer
                 expression.Span);
         }
 
+        ValidateComparisonOperator(expression, leftType, rightType);
+
         expression.SemanticType =
             SemanticTypeOptions.Boolean;
 
         return expression;
     }
+
+    /// <summary>
+    /// Aturan per operator, dipanggil setelah kedua sisi terbukti kompatibel.
+    /// Lihat docs/Operators.md.
+    /// </summary>
+    private static void ValidateComparisonOperator(
+        ComparisonExpression expression,
+        SemanticType leftType,
+        SemanticType rightType)
+    {
+        var keyword = ToKeyword(expression.Operator);
+
+        // Array dan object tidak bisa dibandingkan dengan operator apa pun.
+        if (!SemanticContext.IsScalar(leftType))
+        {
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                $"Operator '{keyword}' cannot be applied to {leftType.Name}.",
+                expression.Left.Span);
+        }
+
+        if (!SemanticContext.IsScalar(rightType))
+        {
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                $"Operator '{keyword}' cannot be applied to {rightType.Name}.",
+                expression.Right.Span);
+        }
+
+        var isEquality =
+            expression.Operator is ComparisonOperator.Equal or ComparisonOperator.NotEqual;
+
+        if (isEquality &&
+            (SemanticContext.IsApproximate(leftType) ||
+             SemanticContext.IsApproximate(rightType)))
+        {
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                $"Operator '{keyword}' is not supported for float and double. " +
+                "Compare a range with gt, gte, lt or lte instead.",
+                expression.Span);
+        }
+
+        // bool hanya punya kesamaan, tidak punya urutan.
+        if (!isEquality && (leftType is BooleanType || rightType is BooleanType))
+        {
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                $"Operator '{keyword}' cannot be applied to bool.",
+                expression.Span);
+        }
+    }
+
+    private static string ToKeyword(ComparisonOperator op) =>
+        op switch
+        {
+            ComparisonOperator.Equal => "eq",
+            ComparisonOperator.NotEqual => "neq",
+            ComparisonOperator.GreaterThan => "gt",
+            ComparisonOperator.GreaterThanOrEqual => "gte",
+            ComparisonOperator.LessThan => "lt",
+            ComparisonOperator.LessThanOrEqual => "lte",
+            _ => op.ToString(),
+        };
 
     private static LogicalExpression AnalyzeLogical(
         LogicalExpression expression,

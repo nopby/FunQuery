@@ -245,6 +245,20 @@ public sealed class SemanticContext
         return false;
     }
 
+    /// <summary>
+    /// Nilai tunggal yang boleh dibandingkan: angka, string, dan bool.
+    /// AnyType (tipe belum diketahui saat analisis) diizinkan; array dan object tidak.
+    /// </summary>
+    public static bool IsScalar(SemanticType type) =>
+        type is AnyType or StringType or BooleanType || IsNumeric(type);
+
+    /// <summary>
+    /// float dan double tidak menyimpan nilai desimal secara tepat, sehingga eq dan neq
+    /// pada keduanya ditolak (lihat docs/Operators.md).
+    /// </summary>
+    public static bool IsApproximate(SemanticType type) =>
+        type is FloatType or DoubleType;
+
     public static bool IsNumeric(SemanticType type) =>
         type switch
         {
