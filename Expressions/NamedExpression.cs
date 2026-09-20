@@ -10,5 +10,5 @@ public sealed record NamedExpression(
 {
     public override AstExpressionType Type => AstExpressionType.Named;
 
-    public override SemanticType SemanticType { get; set; }
+    public override SemanticType? SemanticType { get; set; }
 }

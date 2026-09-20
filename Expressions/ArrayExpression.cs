@@ -7,5 +7,5 @@ public sealed record ArrayExpression(IReadOnlyList<BaseExpression> Elements) : B
 {
     public override AstExpressionType Type => AstExpressionType.Array;
 
-    public override SemanticType SemanticType { get; set; }
+    public override SemanticType? SemanticType { get; set; }
 }

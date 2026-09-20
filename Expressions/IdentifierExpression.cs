@@ -8,7 +8,7 @@ public sealed record IdentifierExpression(
 {
     public override AstExpressionType Type => _type;
 
-    public override SemanticType SemanticType { get; set; }
+    public override SemanticType? SemanticType { get; set; }
 
     private static readonly AstExpressionType _type = AstExpressionType.Identifier;
 }

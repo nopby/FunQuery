@@ -7,5 +7,5 @@ public sealed record BlockExpression(IReadOnlyList<BaseExpression> Expressions) 
 {
     public override AstExpressionType Type => AstExpressionType.Block;
 
-    public override SemanticType SemanticType { get; set; }
+    public override SemanticType? SemanticType { get; set; }
 }

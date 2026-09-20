@@ -12,5 +12,5 @@ public sealed record CallExpression(
     public override AstExpressionType Type =>
         AstExpressionType.Call;
 
-    public override SemanticType SemanticType { get; set; }
+    public override SemanticType? SemanticType { get; set; }
 }

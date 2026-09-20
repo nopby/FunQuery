@@ -1,6 +1,6 @@
 <Solution>
-  <Project Path="FunQuery.csproj" />
   <Folder Name="/tests/">
     <Project Path="tests/FunQuery.Tests/FunQuery.Tests.csproj" />
   </Folder>
+  <Project Path="FunQuery.csproj" />
 </Solution>

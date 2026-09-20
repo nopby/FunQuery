@@ -44,7 +44,7 @@ public class FunctionRegistryTests
         var registry = QueryPipeline.CoreRegistry();
 
         Assert.True(registry.TryGet("$source", out var source));
-        Assert.Equal("$source", source.Name);
+        Assert.Equal("$source", source?.Name);
         Assert.True(registry.TryGet("$filter", out _));
         Assert.False(registry.TryGet("$nope", out _));
         Assert.Contains(registry.Functions, f => f.Name == "$source");
