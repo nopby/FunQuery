@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using FunQuery.Enums;
+using System.Diagnostics;
 
 namespace FunQuery;
 
@@ -24,7 +25,6 @@ class Lexer
                 {
                     position++;
                 }
-                var value = text[startPosition..position];
 
                 tokenBuffer.Add(new Token(
                     TokenType.Call,
@@ -78,7 +78,9 @@ class Lexer
 
                 // Menolak "2abc", "2m", "1.5f"
                 if (position < text.Length && IsIdentifierStart(text[position]))
-                    throw new Exception($"Invalid number at position {start}.");
+                    throw new QueryException(
+                        QueryErrorCode.InvalidNumber,
+                        $"Invalid number at position {start}.");
 
                 tokenBuffer.Add(new Token(TokenType.Number, start, position));
                 continue;
@@ -94,7 +96,9 @@ class Lexer
                 }
 
                 if (position >= text.Length)
-                    throw new Exception("Unterminated string literal.");
+                    throw new QueryException(
+                        QueryErrorCode.UnterminatedString,
+                        "Unterminated string literal.");
 
                 position++;
 
@@ -162,8 +166,10 @@ class Lexer
                         ++position));
                     break;
                 default:
-                    throw new Exception(
-                        $"Unexpected character '{c}' at position {position}.");
+                    throw new QueryException(
+                        QueryErrorCode.UnexpectedCharacter,
+                        $"Unexpected character '{c}'.",
+                        position, 1);
             }
         }
     }

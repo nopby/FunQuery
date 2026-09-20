@@ -1,4 +1,5 @@
-﻿using FunQuery.Expressions;
+﻿using FunQuery.Enums;
+using FunQuery.Expressions;
 using FunQuery.SemanticTypes;
 namespace FunQuery;
 
@@ -51,7 +52,9 @@ public sealed class SemanticContext
     public void PopScope()
     {
         if (_scopes.Count == 0)
-            throw new SemanticException("Cannot pop scope: no active scope.");
+            throw new QueryException(
+                QueryErrorCode.InternalError,
+                "Cannot pop scope: no active scope.");
 
         _scopes.Pop();
     }
@@ -108,19 +111,22 @@ public sealed class SemanticContext
 
         var firstType =
             expression.Elements[0].SemanticType
-            ?? throw new SemanticException(
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
                 "Array element has no semantic type.");
 
         for (int i = 1; i < expression.Elements.Count; i++)
         {
             var elementType =
                 expression.Elements[i].SemanticType
-                ?? throw new SemanticException(
+                ?? throw new QueryException(
+                    QueryErrorCode.InternalError,
                     $"Array element at index {i} has no semantic type.");
 
             if (!AreCompatible(firstType, elementType))
             {
-                throw new SemanticException(
+                throw new QueryException(
+                    QueryErrorCode.IncompatibleElementTypes,
                     $"Array elements must have compatible types. " +
                     $"Expected {firstType.Name}, " +
                     $"got {elementType.Name} at index {i}.");
@@ -141,7 +147,8 @@ public sealed class SemanticContext
 
         // Block biasa: tipe = tipe ekspresi terakhir.
         return expression.Expressions[^1].SemanticType
-            ?? throw new SemanticException(
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
                 "Last expression in block has no semantic type.");
     }
 
@@ -155,10 +162,13 @@ public sealed class SemanticContext
             var name = GetNamedName(named);
 
             if (fields.ContainsKey(name))
-                throw new SemanticException($"Duplicate field '{name}' in object.");
+                throw new QueryException(
+                    QueryErrorCode.DuplicateField,
+                    $"Duplicate field '{name}' in object.");
 
             fields[name] = named.SemanticType
-                ?? throw new SemanticException(
+                ?? throw new QueryException(
+                    QueryErrorCode.InternalError,
                     $"Field '{name}' has no semantic type.");
         }
 

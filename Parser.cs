@@ -20,7 +20,8 @@ public static class Parser
         {
             var token = tokens[position];
 
-            throw new Exception(
+            throw new QueryException(
+                QueryErrorCode.UnexpectedToken,
                 $"Unexpected token at {token.StartPosition}.");
         }
 
@@ -139,7 +140,9 @@ public static class Parser
         ref int position)
     {
         if (position >= tokens.Length)
-            throw new Exception("Expected expression, but reached end of input");
+            throw new QueryException(
+                QueryErrorCode.UnexpectedEndOfInput,
+                "Expected expression, but reached end of input");
 
         return tokens[position].Type switch
         {
@@ -153,7 +156,9 @@ public static class Parser
             TokenType.Call => ParseFunction(source, tokens, ref position),
             TokenType.OpenSquareParenthesis => ParseArray(source, tokens, ref position),
             TokenType.OpenCurlyParenthesis => ParseBlock(source, tokens, ref position),
-            _ => throw new Exception($"Expected expression, got {tokens[position].Type}.")
+            _ => throw new QueryException(
+                QueryErrorCode.UnexpectedToken,
+                $"Expected expression, got {tokens[position].Type}.")
         };
     }
     private static BaseExpression ParseIdentifierOrNamed(
@@ -357,7 +362,8 @@ public static class Parser
         {
             _ when value.Equals("and", StringComparison.OrdinalIgnoreCase) => LogicalOperator.And,
             _ when value.Equals("or", StringComparison.OrdinalIgnoreCase) => LogicalOperator.Or,
-            _ => throw new NotImplementedException(
+            _ => throw new QueryException(
+                QueryErrorCode.UnsupportedOperator,
                 $"Operator '{value.ToString()}' is not implemented.")
         };
     }
@@ -445,7 +451,8 @@ public static class Parser
             _ when value.Equals("gte", StringComparison.OrdinalIgnoreCase) => ComparisonOperator.GreaterThanOrEqual,
             _ when value.Equals("lt", StringComparison.OrdinalIgnoreCase) => ComparisonOperator.LessThan,
             _ when value.Equals("lte", StringComparison.OrdinalIgnoreCase) => ComparisonOperator.LessThanOrEqual,
-            _ => throw new NotImplementedException(
+            _ => throw new QueryException(
+                QueryErrorCode.UnsupportedOperator,
                 $"Operator '{value.ToString()}' is not implemented.")
         };
     }
@@ -455,15 +462,18 @@ public static class Parser
         TokenType expected)
     {
         if (position >= tokens.Length)
-            throw new Exception(
+            throw new QueryException(
+                QueryErrorCode.UnexpectedEndOfInput,
                 $"Expected {expected}, but reached end of input.");
 
         var token = tokens[position];
 
         if (token.Type != expected)
         {
-            throw new Exception(
-                $"Expected {expected}, got {token.Type}.");
+            throw new QueryException(
+                QueryErrorCode.UnexpectedToken,
+                $"Expected {expected}, got {token.Type}.",
+                token);
         }
 
         position++;

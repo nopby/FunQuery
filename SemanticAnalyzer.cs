@@ -1,4 +1,5 @@
-﻿using FunQuery.Expressions;
+﻿using FunQuery.Enums;
+using FunQuery.Expressions;
 using FunQuery.SemanticTypes;
 using System;
 using System.Collections.Generic;
@@ -39,7 +40,8 @@ public static class SemanticAnalyzer
             CallExpression call =>
                 AnalyzeCall(call, context),
 
-            _ => throw new SemanticException(
+            _ => throw new QueryException(
+                QueryErrorCode.InternalError,
                 $"Unsupported expression type: " +
                 $"{expression.GetType().Name}.")
         };
@@ -67,7 +69,8 @@ public static class SemanticAnalyzer
 
         if (type is null)
         {
-            throw new SemanticException(
+            throw new QueryException(
+                QueryErrorCode.UnknownIdentifier,
                 $"Unknown identifier '{name}'.");
         }
 
@@ -86,7 +89,8 @@ public static class SemanticAnalyzer
 
         expression.SemanticType =
             expression.Value.SemanticType
-            ?? throw new SemanticException(
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
                 "Named expression has no semantic type.");
 
         return expression;
@@ -136,19 +140,22 @@ public static class SemanticAnalyzer
 
         var leftType =
             expression.Left.SemanticType
-            ?? throw new SemanticException(
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
                 "Left side of comparison has no semantic type.");
 
         var rightType =
             expression.Right.SemanticType
-            ?? throw new SemanticException(
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
                 "Right side of comparison has no semantic type.");
 
         if (!context.CanCompare(
                 leftType,
                 rightType))
         {
-            throw new SemanticException(
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
                 $"Cannot compare " +
                 $"{leftType.Name} with " +
                 $"{rightType.Name}.");
@@ -174,24 +181,28 @@ public static class SemanticAnalyzer
 
         var leftType =
             expression.Left.SemanticType
-            ?? throw new SemanticException(
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
                 "Left side of logical expression has no semantic type.");
 
         var rightType =
             expression.Right.SemanticType
-            ?? throw new SemanticException(
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
                 "Right side of logical expression has no semantic type.");
 
         if (leftType is not BooleanType)
         {
-            throw new SemanticException(
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
                 "Left side of logical expression " +
                 "must be Boolean.");
         }
 
         if (rightType is not BooleanType)
         {
-            throw new SemanticException(
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
                 "Right side of logical expression " +
                 "must be Boolean.");
         }
@@ -214,7 +225,9 @@ public static class SemanticAnalyzer
         var functionName = context.GetFunctionName(expression.Function);
 
         var function = context.ResolveFunction(functionName)
-            ?? throw new SemanticException($"Unknown function '{functionName}'.");
+            ?? throw new QueryException(
+                QueryErrorCode.UnknownFunction,
+                $"Unknown function '{functionName}'.");
 
         // 3. Validasi target sebelum argumen, karena scope argumen bergantung pada tipe target
         ValidateTarget(expression, function);
@@ -226,7 +239,8 @@ public static class SemanticAnalyzer
         {
             if (targetType is not ArrayType { Type: ObjectType element })
             {
-                throw new SemanticException(
+                throw new QueryException(
+                    QueryErrorCode.InvalidTarget,
                     $"Function '{function.Name}' requires an array of objects as target.");
             }
 
@@ -258,11 +272,13 @@ public static class SemanticAnalyzer
     private static void ValidateArguments(CallExpression expression, FunctionDefinition function)
     {
         if (expression.Arguments.Count < function.MinArguments)
-            throw new SemanticException(
+            throw new QueryException(
+                QueryErrorCode.InvalidArgumentCount,
                 $"Function '{function.Name}' requires at least {function.MinArguments} argument(s).");
 
         if (!function.IsVariadic && expression.Arguments.Count > function.Parameters.Count)
-            throw new SemanticException(
+            throw new QueryException(
+                QueryErrorCode.InvalidArgumentCount,
                 $"Function '{function.Name}' accepts at most {function.Parameters.Count} argument(s).");
 
         for (int i = 0; i < expression.Arguments.Count; i++)
@@ -270,11 +286,13 @@ public static class SemanticAnalyzer
             var parameter = function.Parameters[Math.Min(i, function.Parameters.Count - 1)];
 
             var argumentType = expression.Arguments[i].SemanticType
-                ?? throw new SemanticException(
+                ?? throw new QueryException(
+                    QueryErrorCode.InternalError,
                     $"Argument {i + 1} of '{function.Name}' has no semantic type.");
 
             if (!parameter.Accepts(argumentType.GetType()))
-                throw new SemanticException(
+                throw new QueryException(
+                    QueryErrorCode.TypeMismatch,
                     $"Argument {i + 1} of '{function.Name}' expects {parameter.Type.Name}, got {argumentType.Name}.");
         }
     }
@@ -284,17 +302,20 @@ public static class SemanticAnalyzer
         if (expression.Target is null)
         {
             if (function.RequiresTarget)
-                throw new SemanticException(
+                throw new QueryException(
+                    QueryErrorCode.InvalidTarget,
                     $"Function '{function.Name}' must be called on a target.");
             return;
         }
 
         var targetType = expression.Target.SemanticType
-            ?? throw new SemanticException(
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
                 $"Target of '{function.Name}' has no semantic type.");
 
         if (!function.AcceptsTarget(targetType))
-            throw new SemanticException(
+            throw new QueryException(
+                QueryErrorCode.InvalidTarget,
                 $"Function '{function.Name}' cannot be called on {targetType.Name}.");
     }
 
@@ -309,7 +330,8 @@ public static class SemanticAnalyzer
 
             TokenType.Number => ResolveNumberType(expression, context),
 
-            _ => throw new SemanticException(
+            _ => throw new QueryException(
+                QueryErrorCode.InternalError,
                 $"Unsupported literal type: " +
                 $"{expression.Token.Type}.")
         };
@@ -326,7 +348,9 @@ public static class SemanticAnalyzer
                     CultureInfo.InvariantCulture, out _))
                 return SemanticTypeOptions.Decimal;
 
-            throw new SemanticException($"Number '{text}' is out of range.");
+            throw new QueryException(
+                QueryErrorCode.NumberOutOfRange,
+                $"Number '{text}' is out of range.");
         }
 
         if (int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out _))
@@ -340,6 +364,8 @@ public static class SemanticAnalyzer
                 CultureInfo.InvariantCulture, out _))
             return SemanticTypeOptions.Decimal;
 
-        throw new SemanticException($"Number '{text}' is out of range.");
+        throw new QueryException(
+            QueryErrorCode.NumberOutOfRange,
+            $"Number '{text}' is out of range.");
     }
 }
