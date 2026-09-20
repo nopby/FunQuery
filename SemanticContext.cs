@@ -163,18 +163,9 @@ public sealed class SemanticContext
 
     public SemanticType ResolveBlockType(BlockExpression expression)
     {
-        if (expression.Expressions.Count == 0)
-            return SemanticTypeOptions.Void;
-
-        // Object literal: semua child adalah NamedExpression, mis. {id: 1, name: 'x'}
-        if (expression.Expressions.All(e => e is NamedExpression))
-            return ResolveObjectType(expression);
-
-        // Block biasa: tipe = tipe ekspresi terakhir.
-        return expression.Expressions[^1].SemanticType
-            ?? throw new QueryException(
-                QueryErrorCode.InternalError,
-                "Last expression in block has no semantic type.");
+        // Parser menjamin setiap child adalah NamedExpression, mis. {id: 1, name: 'x'}.
+        // Block kosong {} adalah object tanpa field.
+        return ResolveObjectType(expression);
     }
 
     private ObjectType ResolveObjectType(BlockExpression expression)
@@ -183,7 +174,12 @@ public sealed class SemanticContext
 
         foreach (var child in expression.Expressions)
         {
-            var named = (NamedExpression)child;
+            if (child is not NamedExpression named)
+                throw new QueryException(
+                    QueryErrorCode.InternalError,
+                    "Object literal contains an entry that is not 'name: value'.",
+                    child.Span);
+
             var name = GetNamedName(named);
 
             if (fields.ContainsKey(name))

@@ -15,6 +15,7 @@ public enum QueryErrorCode
     UnexpectedToken,
     UnexpectedEndOfInput,
     UnsupportedOperator,
+    ExpressionOutsideFunction,
 
     // Semantic analyzer
     UnknownFunction,

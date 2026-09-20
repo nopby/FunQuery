@@ -195,14 +195,14 @@ class Lexer
         || c is >= '0' and <= '9';
     private static bool IsNumber(char c) => c is >= '0' and <= '9';
     private static bool IsComparisonOperator(ReadOnlySpan<char> value) =>
-        value.Equals("eq", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("gt", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("gte", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("lt", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("lte", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("neq", StringComparison.OrdinalIgnoreCase);
+        value.Equals("eq", StringComparison.Ordinal)
+        || value.Equals("gt", StringComparison.Ordinal)
+        || value.Equals("gte", StringComparison.Ordinal)
+        || value.Equals("lt", StringComparison.Ordinal)
+        || value.Equals("lte", StringComparison.Ordinal)
+        || value.Equals("neq", StringComparison.Ordinal);
     private static bool IsLogicalOperator(ReadOnlySpan<char> value) =>
-        value.Equals("or", StringComparison.OrdinalIgnoreCase)
-        || value.Equals("and", StringComparison.OrdinalIgnoreCase);
+        value.Equals("or", StringComparison.Ordinal)
+        || value.Equals("and", StringComparison.Ordinal);
     private static bool IsCallStart(char c) => c == '$';
 }

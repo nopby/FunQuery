@@ -28,6 +28,14 @@ public static class Parser
                 token);
         }
 
+        if (expression is not CallExpression)
+        {
+            throw new QueryException(
+                QueryErrorCode.ExpressionOutsideFunction,
+                "Expression must be a function call, e.g. $source(...).",
+                expression.Span);
+        }
+
         return expression;
     }
     private static int EndOfInput(ReadOnlySpan<Token> tokens) =>
@@ -97,7 +105,7 @@ public static class Parser
             return false;
 
         return source[token.StartPosition..token.EndPosition]
-            .Equals(expected, StringComparison.OrdinalIgnoreCase);
+            .Equals(expected, StringComparison.Ordinal);
     }
     private static BaseExpression ParsePostfix(
     ReadOnlySpan<char> source,
@@ -114,6 +122,14 @@ public static class Parser
             ref position,
             TokenType.Dot))
         {
+            if (expression is not CallExpression)
+            {
+                throw new QueryException(
+                    QueryErrorCode.ExpressionOutsideFunction,
+                    "Only a function call can be chained with '.'.",
+                    expression.Span);
+            }
+
             var function = Consume(
                 tokens,
                 ref position,
@@ -167,10 +183,7 @@ public static class Parser
         return tokens[position].Type switch
         {
             TokenType.StringLiteral => ParseValue(tokens, TokenType.StringLiteral, ref position),
-            TokenType.Identifier => ParseIdentifierOrNamed(
-                source,
-                tokens,
-                ref position, ref guard),
+            TokenType.Identifier => ParseIdentifier(tokens, ref position),
             TokenType.Number => ParseValue(tokens, TokenType.Number, ref position),
             TokenType.OpenRoundParenthesis => ParseGroupedExpression(source, tokens, ref position, ref guard),
             TokenType.Call => ParseFunction(source, tokens, ref position, ref guard),
@@ -181,24 +194,6 @@ public static class Parser
                 $"Expected expression, got {tokens[position].Type}.",
                 tokens[position])
         };
-    }
-    private static BaseExpression ParseIdentifierOrNamed(
-    ReadOnlySpan<char> source,
-    ReadOnlySpan<Token> tokens,
-    ref int position, ref ParseGuard guard)
-    {
-        if (position + 1 < tokens.Length &&
-            tokens[position + 1].Type == TokenType.Colon)
-        {
-            return ParseNamed(
-                source,
-                tokens,
-                ref position, ref guard);
-        }
-
-        return ParseIdentifier(
-            tokens,
-            ref position);
     }
     private static NamedExpression ParseNamed(
     ReadOnlySpan<char> source,
@@ -235,30 +230,25 @@ public static class Parser
 
         List<BaseExpression> expressions = [];
 
-        while (position < tokens.Length &&
-               tokens[position].Type != TokenType.CloseCurlyParenthesis)
+        if (!Match(tokens, ref position, TokenType.CloseCurlyParenthesis))
         {
-            expressions.Add(
-                ParseExpression(source, tokens, ref position, ref guard));
-
-            if (position < tokens.Length &&
-                tokens[position].Type == TokenType.Comma)
+            while (true)
             {
-                position++;
-                continue;
+                // Setiap entri wajib berbentuk "nama: nilai". Trailing comma otomatis
+                // ditolak karena setelah koma harus ada entri berikutnya.
+                expressions.Add(
+                    ParseNamed(source, tokens, ref position, ref guard));
+
+                if (Match(tokens, ref position, TokenType.CloseCurlyParenthesis))
+                    break;
+
+                Consume(tokens, ref position, TokenType.Comma);
             }
-
-            break;
         }
-
-        var close = Consume(
-            tokens,
-            ref position,
-            TokenType.CloseCurlyParenthesis);
 
         return new BlockExpression(expressions)
         {
-            Span = new SourceSpan(open.StartPosition, close.EndPosition)
+            Span = new SourceSpan(open.StartPosition, tokens[position - 1].EndPosition)
         };
     }
     private static BaseExpression ParseGroupedExpression(ReadOnlySpan<char> source, ReadOnlySpan<Token> tokens, ref int position, ref ParseGuard guard)
@@ -396,8 +386,8 @@ public static class Parser
 
         return value switch
         {
-            _ when value.Equals("and", StringComparison.OrdinalIgnoreCase) => LogicalOperator.And,
-            _ when value.Equals("or", StringComparison.OrdinalIgnoreCase) => LogicalOperator.Or,
+            _ when value.Equals("and", StringComparison.Ordinal) => LogicalOperator.And,
+            _ when value.Equals("or", StringComparison.Ordinal) => LogicalOperator.Or,
             _ => throw new QueryException(
                 QueryErrorCode.UnsupportedOperator,
                 $"Operator '{value.ToString()}' is not implemented.",
@@ -488,12 +478,12 @@ public static class Parser
 
         return value switch
         {
-            _ when value.Equals("eq", StringComparison.OrdinalIgnoreCase) => ComparisonOperator.Equal,
-            _ when value.Equals("neq", StringComparison.OrdinalIgnoreCase) => ComparisonOperator.NotEqual,
-            _ when value.Equals("gt", StringComparison.OrdinalIgnoreCase) => ComparisonOperator.GreaterThan,
-            _ when value.Equals("gte", StringComparison.OrdinalIgnoreCase) => ComparisonOperator.GreaterThanOrEqual,
-            _ when value.Equals("lt", StringComparison.OrdinalIgnoreCase) => ComparisonOperator.LessThan,
-            _ when value.Equals("lte", StringComparison.OrdinalIgnoreCase) => ComparisonOperator.LessThanOrEqual,
+            _ when value.Equals("eq", StringComparison.Ordinal) => ComparisonOperator.Equal,
+            _ when value.Equals("neq", StringComparison.Ordinal) => ComparisonOperator.NotEqual,
+            _ when value.Equals("gt", StringComparison.Ordinal) => ComparisonOperator.GreaterThan,
+            _ when value.Equals("gte", StringComparison.Ordinal) => ComparisonOperator.GreaterThanOrEqual,
+            _ when value.Equals("lt", StringComparison.Ordinal) => ComparisonOperator.LessThan,
+            _ when value.Equals("lte", StringComparison.Ordinal) => ComparisonOperator.LessThanOrEqual,
             _ => throw new QueryException(
                 QueryErrorCode.UnsupportedOperator,
                 $"Operator '{value.ToString()}' is not implemented.",

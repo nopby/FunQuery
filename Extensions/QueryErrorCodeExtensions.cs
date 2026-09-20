@@ -16,6 +16,7 @@ public static class QueryErrorCodeExtensions
         QueryErrorCode.UnexpectedToken => "UNEXPECTED_TOKEN",
         QueryErrorCode.UnexpectedEndOfInput => "UNEXPECTED_END_OF_INPUT",
         QueryErrorCode.UnsupportedOperator => "UNSUPPORTED_OPERATOR",
+        QueryErrorCode.ExpressionOutsideFunction => "EXPRESSION_OUTSIDE_FUNCTION",
 
         QueryErrorCode.UnknownFunction => "UNKNOWN_FUNCTION",
         QueryErrorCode.UnknownIdentifier => "UNKNOWN_IDENTIFIER",
