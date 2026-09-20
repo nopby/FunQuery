@@ -84,7 +84,8 @@ public static class SemanticAnalyzer
         {
             throw new QueryException(
                 QueryErrorCode.UnknownIdentifier,
-                $"Unknown identifier '{name}'.");
+                $"Unknown identifier '{name}'.",
+                expression.Token);
         }
 
         expression.SemanticType = type;
@@ -240,7 +241,8 @@ public static class SemanticAnalyzer
         var function = context.ResolveFunction(functionName)
             ?? throw new QueryException(
                 QueryErrorCode.UnknownFunction,
-                $"Unknown function '{functionName}'.");
+                $"Unknown function '{functionName}'.",
+                expression.Function);
 
         // 3. Validasi target sebelum argumen, karena scope argumen bergantung pada tipe target
         ValidateTarget(expression, function);
@@ -254,7 +256,8 @@ public static class SemanticAnalyzer
             {
                 throw new QueryException(
                     QueryErrorCode.InvalidTarget,
-                    $"Function '{function.Name}' requires an array of objects as target.");
+                    $"Function '{function.Name}' requires an array of objects as target.",
+                    expression.Function);
             }
 
             using (context.EnterScope(element.Fields))
@@ -287,12 +290,14 @@ public static class SemanticAnalyzer
         if (expression.Arguments.Count < function.MinArguments)
             throw new QueryException(
                 QueryErrorCode.InvalidArgumentCount,
-                $"Function '{function.Name}' requires at least {function.MinArguments} argument(s).");
+                $"Function '{function.Name}' requires at least {function.MinArguments} argument(s).",
+                expression.Function);
 
         if (!function.IsVariadic && expression.Arguments.Count > function.Parameters.Count)
             throw new QueryException(
                 QueryErrorCode.InvalidArgumentCount,
-                $"Function '{function.Name}' accepts at most {function.Parameters.Count} argument(s).");
+                $"Function '{function.Name}' accepts at most {function.Parameters.Count} argument(s).",
+                expression.Function);
 
         for (int i = 0; i < expression.Arguments.Count; i++)
         {
@@ -317,7 +322,8 @@ public static class SemanticAnalyzer
             if (function.RequiresTarget)
                 throw new QueryException(
                     QueryErrorCode.InvalidTarget,
-                    $"Function '{function.Name}' must be called on a target.");
+                    $"Function '{function.Name}' must be called on a target.",
+                    expression.Function);
             return;
         }
 
@@ -329,7 +335,8 @@ public static class SemanticAnalyzer
         if (!function.AcceptsTarget(targetType))
             throw new QueryException(
                 QueryErrorCode.InvalidTarget,
-                $"Function '{function.Name}' cannot be called on {targetType.Name}.");
+                $"Function '{function.Name}' cannot be called on {targetType.Name}.",
+                expression.Function);
     }
 
     private static SemanticType GetValueType(
@@ -363,7 +370,8 @@ public static class SemanticAnalyzer
 
             throw new QueryException(
                 QueryErrorCode.NumberOutOfRange,
-                $"Number '{text}' is out of range.");
+                $"Number '{text}' is out of range.",
+                expression.Token);
         }
 
         if (int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out _))
@@ -379,6 +387,7 @@ public static class SemanticAnalyzer
 
         throw new QueryException(
             QueryErrorCode.NumberOutOfRange,
-            $"Number '{text}' is out of range.");
+            $"Number '{text}' is out of range.",
+                expression.Token);
     }
 }

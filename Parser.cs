@@ -173,7 +173,8 @@ public static class Parser
             TokenType.OpenCurlyParenthesis => ParseBlock(source, tokens, ref position, ref guard),
             _ => throw new QueryException(
                 QueryErrorCode.UnexpectedToken,
-                $"Expected expression, got {tokens[position].Type}.")
+                $"Expected expression, got {tokens[position].Type}.",
+                tokens[position])
         };
     }
     private static BaseExpression ParseIdentifierOrNamed(
@@ -379,7 +380,8 @@ public static class Parser
             _ when value.Equals("or", StringComparison.OrdinalIgnoreCase) => LogicalOperator.Or,
             _ => throw new QueryException(
                 QueryErrorCode.UnsupportedOperator,
-                $"Operator '{value.ToString()}' is not implemented.")
+                $"Operator '{value.ToString()}' is not implemented.",
+                token)
         };
     }
 
@@ -468,7 +470,8 @@ public static class Parser
             _ when value.Equals("lte", StringComparison.OrdinalIgnoreCase) => ComparisonOperator.LessThanOrEqual,
             _ => throw new QueryException(
                 QueryErrorCode.UnsupportedOperator,
-                $"Operator '{value.ToString()}' is not implemented.")
+                $"Operator '{value.ToString()}' is not implemented.",
+                token)
         };
     }
     private static Token Consume(
@@ -479,7 +482,8 @@ public static class Parser
         if (position >= tokens.Length)
             throw new QueryException(
                 QueryErrorCode.UnexpectedEndOfInput,
-                $"Expected {expected}, but reached end of input.");
+                $"Expected {expected}, but reached end of input.",
+                EndOfInput(tokens), 0);
 
         var token = tokens[position];
 

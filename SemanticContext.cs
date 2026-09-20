@@ -183,7 +183,8 @@ public sealed class SemanticContext
             if (fields.ContainsKey(name))
                 throw new QueryException(
                     QueryErrorCode.DuplicateField,
-                    $"Duplicate field '{name}' in object.");
+                    $"Duplicate field '{name}' in object.",
+                    named.Name);
 
             fields[name] = named.SemanticType
                 ?? throw new QueryException(

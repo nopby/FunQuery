@@ -110,7 +110,8 @@ class Lexer
                 if (position >= text.Length)
                     throw new QueryException(
                         QueryErrorCode.UnterminatedString,
-                        $"Unterminated string literal at position {start}.");
+                        "Unterminated string literal.",
+                        start, text.Length - start);
 
                 position++;
 
