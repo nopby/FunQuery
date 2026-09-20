@@ -302,6 +302,9 @@ public static class SemanticAnalyzer
                 $"Function '{function.Name}' accepts at most {function.Parameters.Count} argument(s).",
                 expression.Function);
 
+        if (function.Parameters.Count == 0)
+            return;
+
         for (int i = 0; i < expression.Arguments.Count; i++)
         {
             var parameter = function.Parameters[Math.Min(i, function.Parameters.Count - 1)];
@@ -311,10 +314,10 @@ public static class SemanticAnalyzer
                     QueryErrorCode.InternalError,
                     $"Argument {i + 1} of '{function.Name}' has no semantic type.");
 
-            if (!parameter.Accepts(argumentType.GetType()))
+            if (!parameter.Accepts(argumentType))
                 throw new QueryException(
                     QueryErrorCode.TypeMismatch,
-                    $"Argument {i + 1} of '{function.Name}' expects {parameter.Type.Name}, got {argumentType.Name}.",
+                    $"Argument {i + 1} of '{function.Name}' expects {parameter.Expected}, got {argumentType.Name}.",
                     expression.Arguments[i].Span);
         }
     }
@@ -323,13 +326,19 @@ public static class SemanticAnalyzer
     {
         if (expression.Target is null)
         {
-            if (function.RequiresTarget)
+            if (function.TargetRule == TargetRule.Required)
                 throw new QueryException(
                     QueryErrorCode.InvalidTarget,
                     $"Function '{function.Name}' must be called on a target.",
                     expression.Function);
             return;
         }
+
+        if (function.TargetRule == TargetRule.Forbidden)
+            throw new QueryException(
+                QueryErrorCode.InvalidTarget,
+                $"Function '{function.Name}' must start the chain and cannot be called on a target.",
+                expression.Function);
 
         var targetType = expression.Target.SemanticType
             ?? throw new QueryException(

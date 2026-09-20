@@ -9,7 +9,7 @@ public sealed class SemanticContext
 
     private readonly IReadOnlyDictionary<string, SemanticType> _identifiers;
 
-    private readonly IReadOnlyDictionary<string, FunctionDefinition> _functions;
+    private readonly FunctionRegistry _functions;
 
     // Stack scope untuk identifier lokal (mis. field elemen di dalam $filter).
     // Enumerasi Stack<T> dimulai dari elemen paling atas (scope terdalam).
@@ -21,12 +21,12 @@ public sealed class SemanticContext
     public SemanticContext(
         ReadOnlyMemory<char> source,
         IReadOnlyDictionary<string, SemanticType> identifiers,
-        IReadOnlyDictionary<string, FunctionDefinition> functions,
+        FunctionRegistry functions,
         QueryLimits? limits = null)
     {
         _source = source;
         _identifiers = identifiers;
-        _functions = functions;
+        _functions = functions.Freeze();
         _maxDepth = (limits ?? QueryLimits.Default).MaxDepth;
     }
 
@@ -120,7 +120,7 @@ public sealed class SemanticContext
     }
 
     public FunctionDefinition? ResolveFunction(string name) =>
-        _functions.TryGetValue(name, out var function)
+        _functions.TryGet(name, out var function)
             ? function
             : null;
 

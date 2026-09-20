@@ -1,4 +1,5 @@
-﻿using FunQuery.SemanticTypes;
+﻿using FunQuery.Enums;
+using FunQuery.SemanticTypes;
 
 namespace FunQuery;
 
@@ -20,8 +21,8 @@ public sealed class FunctionDefinition
     // Baru: argumen dianalisis di dalam scope field elemen target
     public bool UsesElementScope { get; init; }
 
-    // Baru: fungsi ini wajib dipanggil dengan target (x.$filter(...))
-    public bool RequiresTarget { get; init; }
+    // Aturan target: wajib, boleh, atau dilarang dipanggil pada target (x.$fn(...))
+    public TargetRule TargetRule { get; init; } = TargetRule.Optional;
 
     public Func<SemanticType?, SemanticType> ReturnType { get; init; } =
         _ => SemanticTypeOptions.Unknown;

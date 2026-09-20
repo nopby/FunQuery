@@ -19,28 +19,9 @@ var identifier = new Dictionary<string, SemanticType>
     { "name", SemanticTypeOptions.String  },
 };
 
-var functions = new Dictionary<string, FunctionDefinition>
-{
-    ["$source"] = new()
-    {
-        Name = "$source",
-        Parameters = [new ParameterDefinition { Name = "source", Type = typeof(ArrayType) }],
-        ReturnTypeFromArguments = (_, args) => args[0],
-    },
-
-    ["$filter"] = new()
-    {
-        Name = "$filter",
-        Parameters =
-        [
-            new ParameterDefinition { Name = "predicate", Type = typeof(BooleanType) }
-        ],
-        RequiresTarget = true,
-        UsesElementScope = true,
-        AcceptsTarget = t => t is ArrayType,
-        ReturnType = target => target ?? SemanticTypeOptions.Unknown,
-    },
-};
+// Function inti didaftarkan lewat mekanisme ekstensi yang sama dengan ekstensi lain (mis. SQL nanti).
+var functions = new FunctionRegistry()
+    .AddExtension(new CoreFunctions());
 
 var semanticContext = new SemanticContext(input.AsMemory(), identifier, functions, limits);
 var result = SemanticAnalyzer.Analyze(parsed, semanticContext);
