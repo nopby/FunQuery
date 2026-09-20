@@ -1,4 +1,4 @@
-﻿namespace Console.Enums;
+﻿namespace FunQuery.Enums;
 
 public enum AstExpressionType
 {

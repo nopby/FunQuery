@@ -1,7 +1,7 @@
-﻿using Console.Enums;
-using Console.SemanticTypes;
+﻿using FunQuery.Enums;
+using FunQuery.SemanticTypes;
 
-namespace Console.Expressions;
+namespace FunQuery.Expressions;
 
 public sealed record ComparisonExpression(
     BaseExpression Left,

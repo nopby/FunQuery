@@ -1,8 +1,8 @@
 ﻿
 
 
-using Console;
-using Console.SemanticTypes;
+using FunQuery;
+using FunQuery.SemanticTypes;
 
 string input = "$source([{id: 1, name: 'hello'}, {id: 2, name: 'world'}]).$filter(id eq 2.1)";
 

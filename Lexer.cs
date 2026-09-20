@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics;
 
-namespace Console;
+namespace FunQuery;
 
 class Lexer
 {

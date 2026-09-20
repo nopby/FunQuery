@@ -1,6 +1,6 @@
-﻿using Console.Expressions;
-using Console.SemanticTypes;
-namespace Console;
+﻿using FunQuery.Expressions;
+using FunQuery.SemanticTypes;
+namespace FunQuery;
 
 public sealed class SemanticContext
 {

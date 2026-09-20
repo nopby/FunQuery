@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace Console.Enums;
+namespace FunQuery.Enums;
 
 public enum ComparisonOperator
 {

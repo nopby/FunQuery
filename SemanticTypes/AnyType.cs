@@ -1,4 +1,4 @@
-﻿namespace Console.SemanticTypes;
+﻿namespace FunQuery.SemanticTypes;
 
 public sealed record AnyType : SemanticType
 {

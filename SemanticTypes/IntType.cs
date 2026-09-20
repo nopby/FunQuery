@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace Console.SemanticTypes;
+namespace FunQuery.SemanticTypes;
 
 public sealed record IntType : SemanticType
 {

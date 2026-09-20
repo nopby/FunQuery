@@ -1,6 +1,6 @@
 ﻿using System.Buffers;
 
-namespace Console;
+namespace FunQuery;
 
 public sealed class TokenBuffer : IDisposable
 {

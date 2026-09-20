@@ -1,4 +1,4 @@
-﻿namespace Console;
+﻿namespace FunQuery;
 
 public sealed class SemanticException : Exception
 {

@@ -1,7 +1,7 @@
-﻿using Console.Expressions;
-using Console.Enums;
+﻿using FunQuery.Expressions;
+using FunQuery.Enums;
 
-namespace Console;
+namespace FunQuery;
 
 public static class Parser
 {

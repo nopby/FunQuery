@@ -1,6 +1,6 @@
-﻿using Console.SemanticTypes;
+﻿using FunQuery.SemanticTypes;
 
-namespace Console;
+namespace FunQuery;
 
 public sealed class ParameterDefinition
 {

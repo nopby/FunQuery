@@ -1,4 +1,4 @@
-﻿namespace Console.SemanticTypes;
+﻿namespace FunQuery.SemanticTypes;
 
 public abstract record SemanticType
 {

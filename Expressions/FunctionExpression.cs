@@ -1,10 +1,10 @@
-﻿using Console.Enums;
-using Console.SemanticTypes;
+﻿using FunQuery.Enums;
+using FunQuery.SemanticTypes;
 using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace Console.Expressions;
+namespace FunQuery.Expressions;
 
 public sealed record FunctionExpression(Token Token, IReadOnlyList<BaseExpression> Arguments)
     : BaseExpression

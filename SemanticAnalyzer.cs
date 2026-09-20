@@ -1,11 +1,11 @@
-﻿using Console.Expressions;
-using Console.SemanticTypes;
+﻿using FunQuery.Expressions;
+using FunQuery.SemanticTypes;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
-namespace Console;
+namespace FunQuery;
 
 public static class SemanticAnalyzer
 {
