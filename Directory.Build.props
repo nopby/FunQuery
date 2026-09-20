@@ -1,0 +1,20 @@
+<Project>
+
+  <!--
+    Repository layout:
+      FunQuery.csproj          the library / demo host (stays at the repository root)
+      tests/FunQuery.Tests/    unit tests (in-memory only, no database required)
+
+    The root project globs **/*.cs, so tests/ must be excluded from it. Otherwise the
+    test sources would be compiled into FunQuery itself.
+  -->
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <!-- Lexer and a few other pieces are internal; let the test project see them. -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'FunQuery'">
+    <InternalsVisibleTo Include="FunQuery.Tests" />
+  </ItemGroup>
+
+</Project>
