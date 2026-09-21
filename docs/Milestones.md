@@ -318,7 +318,8 @@ Support heterogeneous arrays and objects.
 
 ```text
 $let(
-    @items = [
+    @items,
+    [
         {id: 1, name: 'hello'},
         {id: 2, name: 'world'}
     ]
