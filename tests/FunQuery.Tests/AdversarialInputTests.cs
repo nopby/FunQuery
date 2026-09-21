@@ -93,7 +93,7 @@ public class AdversarialInputTests
     private static readonly string[] Fragments =
     [
         "$source", "$filter", "$x", "(", ")", "[", "]", "{", "}", ",", ":", ".", " ",
-        "id", "name", "eq", "neq", "gt", "and", "or", "1", "2.5", "007", "'x'", "'", "#", "\"",
+        "id", "name", "eq", "neq", "gt", "and", "or", "1", "2.5", "007", "'x'", "'", "#", "\"", "true", "false", "null",
     ];
 
     private static readonly string[] ValidQueries =
@@ -101,13 +101,16 @@ public class AdversarialInputTests
         "$source([{id: 1, name: 'hello'}, {id: 2, name: 'world'}]).$filter(id eq 2)",
         "$source([{id: 1}]).$filter(id gte 1 and id lt 5 or id neq 3)",
         "($source([{a: 1.5, b: 'x'}])).$filter(a gt 1)",
+        "$source([{id: 1, name: null}, {id: 2, name: 'x'}]).$filter(name neq null and id lte 2)",
     ];
+
+    private static readonly QueryEngine Engine = new();
 
     private static string? Run(string input)
     {
         try
         {
-            QueryPipeline.Analyze(input);
+            Engine.Execute(input).ToJson();
             return null;
         }
         catch (QueryException error) when (!error.IsInternal)

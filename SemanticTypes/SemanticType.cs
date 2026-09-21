@@ -30,6 +30,8 @@ public static class SemanticTypeOptions
         new UnknownType();
     public static readonly SemanticType Void =
         new VoidType();
+    public static readonly SemanticType Null =
+        new NullType();
     public static readonly SemanticType AnyType =
         new AnyType();
     public static SemanticType Array(SemanticType type) =>

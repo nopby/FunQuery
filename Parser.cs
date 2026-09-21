@@ -185,6 +185,8 @@ public static class Parser
             TokenType.StringLiteral => ParseValue(tokens, TokenType.StringLiteral, ref position),
             TokenType.Identifier => ParseIdentifier(tokens, ref position),
             TokenType.Number => ParseValue(tokens, TokenType.Number, ref position),
+            TokenType.BooleanLiteral => ParseValue(tokens, TokenType.BooleanLiteral, ref position),
+            TokenType.NullLiteral => ParseValue(tokens, TokenType.NullLiteral, ref position),
             TokenType.OpenRoundParenthesis => ParseGroupedExpression(source, tokens, ref position, ref guard),
             TokenType.Call => ParseFunction(source, tokens, ref position, ref guard),
             TokenType.OpenSquareParenthesis => ParseArray(source, tokens, ref position, ref guard),

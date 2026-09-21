@@ -62,8 +62,8 @@ Both operands are checked together. The first rule that fails decides the error.
 | - | -------------------------------------------------------------------- | ---------------- |
 | 1 | The two types must be comparable: the same type, both numeric, or one is `any` | `TYPE_MISMATCH` (`Cannot compare X with Y.`) |
 | 2 | Neither operand is an array or an object                             | `TYPE_MISMATCH` (`Operator 'eq' cannot be applied to array.`) |
-| 3 | For `eq` and `neq`: neither operand is `float` or `double`           | `TYPE_MISMATCH` (`... not supported for float and double.`) |
-| 4 | For `gt`, `gte`, `lt`, `lte`: neither operand is `bool`              | `TYPE_MISMATCH` (`Operator 'gt' cannot be applied to bool.`) |
+| 3 | For `eq` and `neq`: neither operand is `float` or `double`, unless the other operand is the `null` literal (a null test is not a value comparison) | `TYPE_MISMATCH` (`... not supported for float and double.`) |
+| 4 | For `gt`, `gte`, `lt`, `lte`: neither operand is `bool` or the `null` literal | `TYPE_MISMATCH` (`Operator 'gt' cannot be applied to bool.`, `... to null.`) |
 
 The resulting matrix:
 
@@ -72,7 +72,8 @@ The resulting matrix:
 | `int`, `long`, `decimal` (any mix)   | yes         | yes                      |
 | `string`, `string`                   | yes         | yes                      |
 | `bool`, `bool`                       | yes         | no                       |
-| `float` or `double` (with any number)| **no**      | yes                      |
+| `float` or `double` (with any number)| **no** (`x eq null` and `x neq null` are allowed) | yes |
+| the `null` literal (with any scalar) | yes         | no                       |
 | `array` or `object`                  | no          | no                       |
 | different families (number and string, string and bool, ...) | no | no          |
 
@@ -95,7 +96,7 @@ Comparing two literals (`1 eq 1`) is accepted.
 
 ### Null behavior
 
-Applies from Milestone 2. Comparisons are **two-valued**.
+Comparisons are **two-valued**.
 
 | Expression          | `x` is null | `x` is not null            |
 | ------------------- | ----------- | -------------------------- |
@@ -107,6 +108,8 @@ Applies from Milestone 2. Comparisons are **two-valued**.
 
 * Ordering against the `null` literal (`x gt null`) is a type error, because `null` has no order.
 * A missing field reads as `null`.
+* A field whose value is null in every row has type `null`. It can be tested with `eq` and `neq`, but it
+  cannot be ordered, because its type carries no order.
 
 ### Provider expectations
 
@@ -126,6 +129,8 @@ Applies from Milestone 2. Comparisons are **two-valued**.
 * Operands must be `bool`. Anything else is `TYPE_MISMATCH` (`Left side of logical expression must be Boolean.`).
 * `and` binds tighter than `or`. Both are left-associative.
 * Because comparisons are two-valued, `and`, `or`, and `not` are two-valued too. There is no "unknown".
+* A `bool` value that is null counts as false, both as an operand of `and` and `or` and as the predicate of
+  `$filter`.
 
 ## Planned operators (Milestone 3)
 

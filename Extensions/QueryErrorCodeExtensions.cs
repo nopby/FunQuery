@@ -26,6 +26,7 @@ public static class QueryErrorCodeExtensions
         QueryErrorCode.IncompatibleElementTypes => "INCOMPATIBLE_ELEMENT_TYPES",
         QueryErrorCode.DuplicateField => "DUPLICATE_FIELD",
         QueryErrorCode.NumberOutOfRange => "NUMBER_OUT_OF_RANGE",
+        QueryErrorCode.NotSupported => "NOT_SUPPORTED",
 
         QueryErrorCode.InputTooLong => "INPUT_TOO_LONG",
         QueryErrorCode.MaxDepthExceeded => "MAX_DEPTH_EXCEEDED",

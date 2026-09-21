@@ -89,6 +89,25 @@ public class ComparisonRulesTests
         Assert.NotNull(Analyze(predicate).SemanticType);
     }
 
+    [Theory]
+    [InlineData("price eq null")]
+    [InlineData("price neq null")]
+    [InlineData("null eq ratio")]
+    [InlineData("null neq price")]
+    public void NullTestOnFloatOrDouble_IsAllowed(string predicate)
+    {
+        // "price eq null" tests for absence; it does not compare floating point values.
+        Assert.NotNull(Analyze(predicate).SemanticType);
+    }
+
+    [Theory]
+    [InlineData("price gt null")]
+    [InlineData("null lte ratio")]
+    public void OrderingFloatOrDoubleWithTheNullLiteral_IsRejected(string predicate)
+    {
+        Assert.Contains("cannot be applied to null", Fails(predicate).Message);
+    }
+
     // ------------------------------------------------------------------
     // int, long, decimal
     // ------------------------------------------------------------------

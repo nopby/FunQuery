@@ -58,6 +58,8 @@ public class ErrorPositionTests
     [InlineData("$source([{id:1},{id:2,name:'x'}])", QueryErrorCode.IncompatibleElementTypes, 16, 15)]
     [InlineData("$source([1,'a'])", QueryErrorCode.IncompatibleElementTypes, 11, 3)]
     // ---- analyzer: names and numbers
+    [InlineData("$source([{id:1}]).$filter(id gt null)", QueryErrorCode.TypeMismatch, 26, 10)]
+    [InlineData("$source([{id:1}]).$filter(null)", QueryErrorCode.TypeMismatch, 26, 4)]
     [InlineData("$source([{id:1}]).$filter(zzz eq 1)", QueryErrorCode.UnknownIdentifier, 26, 3)]
     [InlineData("$source([{id:1}]).$filter(Id eq 1)", QueryErrorCode.UnknownIdentifier, 26, 2)]
     [InlineData("$source([{id:1,id:2}])", QueryErrorCode.DuplicateField, 15, 2)]

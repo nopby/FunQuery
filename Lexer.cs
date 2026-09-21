@@ -59,6 +59,9 @@ class Lexer
                 {
                     _ when IsComparisonOperator(value) == true => TokenType.ComparisonOperator,
                     _ when IsLogicalOperator(value) == true => TokenType.LogicalOperator,
+                    _ when value.Equals("true", StringComparison.Ordinal) ||
+                           value.Equals("false", StringComparison.Ordinal) => TokenType.BooleanLiteral,
+                    _ when value.Equals("null", StringComparison.Ordinal) => TokenType.NullLiteral,
                     _ => TokenType.Identifier,
                 };
 

@@ -59,6 +59,7 @@ public class QueryExceptionTests
     [InlineData(QueryErrorCode.IncompatibleElementTypes, "INCOMPATIBLE_ELEMENT_TYPES")]
     [InlineData(QueryErrorCode.DuplicateField, "DUPLICATE_FIELD")]
     [InlineData(QueryErrorCode.NumberOutOfRange, "NUMBER_OUT_OF_RANGE")]
+    [InlineData(QueryErrorCode.NotSupported, "NOT_SUPPORTED")]
     [InlineData(QueryErrorCode.InputTooLong, "INPUT_TOO_LONG")]
     [InlineData(QueryErrorCode.MaxDepthExceeded, "MAX_DEPTH_EXCEEDED")]
     [InlineData(QueryErrorCode.TooManyTokens, "TOO_MANY_TOKENS")]

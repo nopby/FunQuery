@@ -135,6 +135,10 @@ public sealed class SemanticContext
                 QueryErrorCode.InternalError,
                 "Array element has no semantic type.");
 
+        // Tipe elemen digabung selama pemeriksaan: null menyatu dengan tipe apa pun,
+        // jadi [null, 'a'] adalah array string.
+        var elementTypeSoFar = firstType;
+
         for (int i = 1; i < expression.Elements.Count; i++)
         {
             var elementType =
@@ -143,12 +147,14 @@ public sealed class SemanticContext
                     QueryErrorCode.InternalError,
                     $"Array element at index {i} has no semantic type.");
 
-            if (!AreCompatible(firstType, elementType))
+            var unified = Unify(elementTypeSoFar, elementType);
+
+            if (unified is null)
             {
-                var message = firstType is ObjectType && elementType is ObjectType
+                var message = elementTypeSoFar is ObjectType && elementType is ObjectType
                     ? $"Array element at index {i} has different fields than the first element."
                     : $"Array elements must have compatible types. " +
-                      $"Expected {firstType.Name}, " +
+                      $"Expected {elementTypeSoFar.Name}, " +
                       $"got {elementType.Name} at index {i}.";
 
                 throw new QueryException(
@@ -156,9 +162,11 @@ public sealed class SemanticContext
                     message,
                     expression.Elements[i].Span);
             }
+
+            elementTypeSoFar = unified;
         }
 
-        return new ArrayType(firstType);
+        return new ArrayType(elementTypeSoFar);
     }
 
     public SemanticType ResolveBlockType(BlockExpression expression)
@@ -215,34 +223,71 @@ public sealed class SemanticContext
         return IsNumeric(left) && IsNumeric(right);
     }
 
-    public static bool AreCompatible(SemanticType left, SemanticType right)
+    public static bool AreCompatible(SemanticType left, SemanticType right) =>
+        Unify(left, right) is not null;
+
+    /// <summary>
+    /// Menggabungkan dua tipe menjadi satu tipe yang mewakili keduanya, atau null bila tidak bisa.
+    /// null menyatu dengan tipe apa pun (hasilnya tipe yang lain), array kosong menyatu dengan array apa pun,
+    /// dan object menyatu bila field-nya sama dan setiap tipe field bisa digabung.
+    /// </summary>
+    public static SemanticType? Unify(SemanticType left, SemanticType right)
     {
         if (left == right)
-            return true;
+            return left;
 
-        if (left is AnyType || right is AnyType)
-            return true;
+        if (left is AnyType)
+            return left;
+
+        if (right is AnyType)
+            return right;
+
+        if (left is NullType)
+            return right;
+
+        if (right is NullType)
+            return left;
 
         if (left is ArrayType la && right is ArrayType ra)
         {
-            // Array kosong (element Unknown) kompatibel dengan array apa pun.
-            if (la.Type is UnknownType || ra.Type is UnknownType)
-                return true;
+            // Array kosong (element Unknown) menyatu dengan array apa pun.
+            if (la.Type is UnknownType)
+                return ra;
 
-            return AreCompatible(la.Type, ra.Type);
+            if (ra.Type is UnknownType)
+                return la;
+
+            var element = Unify(la.Type, ra.Type);
+
+            return element is null ? null : new ArrayType(element);
         }
 
         // ObjectType berisi dictionary sehingga equality bawaan record
-        // membandingkan referensi. Bandingkan secara struktural.
+        // membandingkan referensi. Gabungkan secara struktural.
         if (left is ObjectType lo && right is ObjectType ro)
         {
-            return lo.Fields.Count == ro.Fields.Count &&
-                   lo.Fields.All(f =>
-                       ro.Fields.TryGetValue(f.Key, out var other) &&
-                       AreCompatible(f.Value, other));
+            if (lo.Fields.Count != ro.Fields.Count)
+                return null;
+
+            var fields = new Dictionary<string, SemanticType>(lo.Fields.Count);
+
+            foreach (var field in lo.Fields)
+            {
+                if (!ro.Fields.TryGetValue(field.Key, out var other))
+                    return null;
+
+                var merged = Unify(field.Value, other);
+
+                if (merged is null)
+                    return null;
+
+                fields[field.Key] = merged;
+            }
+
+            return new ObjectType(fields);
         }
 
-        return false;
+        return null;
     }
 
     /// <summary>
@@ -250,7 +295,7 @@ public sealed class SemanticContext
     /// AnyType (tipe belum diketahui saat analisis) diizinkan; array dan object tidak.
     /// </summary>
     public static bool IsScalar(SemanticType type) =>
-        type is AnyType or StringType or BooleanType || IsNumeric(type);
+        type is AnyType or NullType or StringType or BooleanType || IsNumeric(type);
 
     /// <summary>
     /// float dan double tidak menyimpan nilai desimal secara tepat, sehingga eq dan neq

@@ -13,13 +13,13 @@ Type names below are the names used in error messages (`Cannot compare string wi
 | `long`    | `2147483648`               | `System.Int64`                  | v1     |
 | `decimal` | `1.5`                      | `System.Decimal`                | v1     |
 | `string`  | `'hello'`                  | `System.String`                 | v1     |
-| `bool`    | `true`, `false`            | `System.Boolean`                | M2     |
-| `null`    | `null`                     | absence of a value              | M2     |
+| `bool`    | `true`, `false`            | `System.Boolean`                | v1     |
+| `null`    | `null`                     | absence of a value              | v1     |
 | `array`   | `[1, 2, 3]`                | ordered list of one element type| v1     |
 | `object`  | `{id: 1, name: 'x'}`       | ordered set of named fields     | v1     |
 
-Values of type `bool` already exist as the result of comparisons. Their literals (`true`, `false`) and the
-`null` type arrive in Milestone 2.
+`true`, `false`, and `null` are reserved words. They cannot be used as field names, and they are
+case-sensitive: `TRUE` and `Null` are ordinary identifiers.
 
 `float` and `double` are **not language types in v1**. See [Floating point](#floating-point).
 
@@ -100,13 +100,13 @@ How a provider maps its schema types to language types is decided when providers
 
 ## Booleans
 
-* Produced by comparisons and logical operators. Literals `true` and `false` arrive in Milestone 2.
+* Produced by comparisons and logical operators, and written as the literals `true` and `false`.
 * Booleans can be tested for equality (`eq`, `neq`) but have no order: `gt`, `gte`, `lt`, `lte` are rejected.
 * The operands of `and` and `or`, and the predicate of `$filter`, must be `bool`. A number is not truthy.
 
 ## Null
 
-`null` arrives in Milestone 2. The rules are fixed here so that all providers can implement them.
+These rules are the reference that every provider must reproduce.
 
 * A field that is missing from an object reads as `null`.
 * `null` has its own type. It can be compared with any scalar using `eq` and `neq`.
@@ -115,6 +115,11 @@ How a provider maps its schema types to language types is decided when providers
   `null eq 5` is false and `null neq 5` is true.
 * Ordering a null value (`gt`, `gte`, `lt`, `lte`) is false. Ordering against the `null` literal is a type
   error, because `null` has no order.
+* Inside arrays, `null` unifies with any other type. `[1, null, 2]` is an array of `int`, and
+  `[{id: 1}, {id: null}]` is an array of objects whose `id` is an `int`. A field that is null in every row has
+  type `null`, and cannot be ordered.
+* A `bool` that is null counts as false where a boolean is required: as an operand of `and` and `or`, and as
+  the predicate of `$filter`.
 
 SQL uses three-valued logic. A SQL provider must translate to the two-valued behavior above (for example
 `x neq @p` becomes `(x <> @p OR x IS NULL)`). The language does not adopt SQL's behavior.
@@ -124,7 +129,8 @@ SQL uses three-valued logic. A SQL provider must translate to the two-valued beh
 * Written `[a, b, c]`. Trailing commas are rejected. `[]` is allowed.
 * All elements must currently have the same type. `[1, 'a']` is `INCOMPATIBLE_ELEMENT_TYPES`, and so is
   `[1, 1.5]`, because the element types `int` and `decimal` differ. Numeric widening and heterogeneous
-  arrays arrive in Milestone 3.
+  arrays arrive in Milestone 3. `null` is the exception: it unifies with any element type (see
+  [Null](#null)). An empty array unifies with any array, so `[[], [1]]` is an array of `array<int>`.
 * An array is a value, but it cannot be compared with any operator (see [`Operators.md`](Operators.md)).
 
 ## Objects

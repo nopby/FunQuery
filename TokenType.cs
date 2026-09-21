@@ -16,5 +16,7 @@ public enum TokenType
     CloseCurlyParenthesis,
     Comma,
     Colon,
-    Number
+    Number,
+    BooleanLiteral,
+    NullLiteral
 }

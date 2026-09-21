@@ -26,6 +26,7 @@ public enum QueryErrorCode
     IncompatibleElementTypes,
     DuplicateField,
     NumberOutOfRange,
+    NotSupported,
 
     // Batas keamanan (dipakai saat batas-batas itu diimplementasikan)
     InputTooLong,

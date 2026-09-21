@@ -215,7 +215,20 @@ public static class SemanticAnalyzer
         var isEquality =
             expression.Operator is ComparisonOperator.Equal or ComparisonOperator.NotEqual;
 
+        var hasNull = leftType is NullType || rightType is NullType;
+
+        // null tidak punya urutan; hanya eq dan neq yang berlaku.
+        if (!isEquality && hasNull)
+        {
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                $"Operator '{keyword}' cannot be applied to null.",
+                expression.Span);
+        }
+
+        // "price eq null" adalah uji null, bukan kesamaan nilai floating point, jadi diizinkan.
         if (isEquality &&
+            !hasNull &&
             (SemanticContext.IsApproximate(leftType) ||
              SemanticContext.IsApproximate(rightType)))
         {
@@ -428,6 +441,12 @@ public static class SemanticAnalyzer
                 SemanticTypeOptions.String,
 
             TokenType.Number => ResolveNumberType(expression, context),
+
+            TokenType.BooleanLiteral =>
+                SemanticTypeOptions.Boolean,
+
+            TokenType.NullLiteral =>
+                SemanticTypeOptions.Null,
 
             _ => throw new QueryException(
                 QueryErrorCode.InternalError,
