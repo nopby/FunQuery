@@ -55,6 +55,36 @@ public static class ValueOperations
     }
 
     /// <summary>
+    /// in: true bila <paramref name="value"/> sama (eq) dengan salah satu elemen. null hanya ada
+    /// di dalam array bila array memuat null. Bukan array (mis. null) berarti false.
+    /// </summary>
+    public static bool In(object? value, object? sequence)
+    {
+        if (sequence is not IEnumerable<object?> items)
+            return false;
+
+        foreach (var item in items)
+        {
+            if (Equal(value, item))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>contains: uji substring ordinal dan case-sensitive. null memberi false.</summary>
+    public static bool Contains(object? text, object? part) =>
+        text is string t && part is string p && t.Contains(p, StringComparison.Ordinal);
+
+    /// <summary>startswith: uji awalan ordinal dan case-sensitive. null memberi false.</summary>
+    public static bool StartsWith(object? text, object? prefix) =>
+        text is string t && prefix is string p && t.StartsWith(p, StringComparison.Ordinal);
+
+    /// <summary>endswith: uji akhiran ordinal dan case-sensitive. null memberi false.</summary>
+    public static bool EndsWith(object? text, object? suffix) =>
+        text is string t && suffix is string p && t.EndsWith(p, StringComparison.Ordinal);
+
+    /// <summary>
     /// Konteks boolean (operand and/or dan predikat $filter): hanya true yang dihitung true.
     /// null dihitung false.
     /// </summary>

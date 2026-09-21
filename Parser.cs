@@ -67,7 +67,7 @@ public static class Parser
         ReadOnlySpan<Token> tokens,
         ref int position, ref ParseGuard guard)
     {
-        var left = ParseComparison(
+        var left = ParseNot(
         source,
         tokens,
         ref position, ref guard);
@@ -83,7 +83,7 @@ public static class Parser
                 tokens,
                 ref position);
 
-            var right = ParseComparison(
+            var right = ParseNot(
                 source,
                 tokens,
                 ref position, ref guard);
@@ -96,6 +96,39 @@ public static class Parser
 
         return left;
     }
+    private static BaseExpression ParseNot(
+        ReadOnlySpan<char> source,
+        ReadOnlySpan<Token> tokens,
+        ref int position, ref ParseGuard guard)
+    {
+        // not membungkus satu perbandingan: "not id eq 1" berarti not (id eq 1).
+        // Sengaja berupa perulangan, bukan rekursi, supaya "not not not ..." tidak memakai stack
+        // parser. Kedalaman pohon hasilnya tetap dibatasi oleh analyzer.
+        List<Token>? nots = null;
+
+        while (position < tokens.Length &&
+               tokens[position].Type == TokenType.NotOperator)
+        {
+            (nots ??= []).Add(tokens[position]);
+            position++;
+        }
+
+        var operand = ParseComparison(source, tokens, ref position, ref guard);
+
+        if (nots is null)
+            return operand;
+
+        for (int i = nots.Count - 1; i >= 0; i--)
+        {
+            operand = new NotExpression(operand)
+            {
+                Span = new SourceSpan(nots[i].StartPosition, operand.Span.End)
+            };
+        }
+
+        return operand;
+    }
+
     private static bool IsLogicalOperator(
         ReadOnlySpan<char> source,
         Token token,
@@ -202,10 +235,12 @@ public static class Parser
     ReadOnlySpan<Token> tokens,
     ref int position, ref ParseGuard guard)
     {
-        var name = Consume(
-        tokens,
-        ref position,
-        TokenType.Identifier);
+        // Nama field boleh berupa identifier, atau string bila mengandung karakter khusus
+        // atau bentrok dengan kata yang dicadangkan: {'first-name': 1}, {'in': 1}.
+        var name = position < tokens.Length &&
+                   tokens[position].Type == TokenType.StringLiteral
+            ? Consume(tokens, ref position, TokenType.StringLiteral)
+            : Consume(tokens, ref position, TokenType.Identifier);
 
         Consume(
             tokens,
@@ -486,6 +521,10 @@ public static class Parser
             _ when value.Equals("gte", StringComparison.Ordinal) => ComparisonOperator.GreaterThanOrEqual,
             _ when value.Equals("lt", StringComparison.Ordinal) => ComparisonOperator.LessThan,
             _ when value.Equals("lte", StringComparison.Ordinal) => ComparisonOperator.LessThanOrEqual,
+            _ when value.Equals("in", StringComparison.Ordinal) => ComparisonOperator.In,
+            _ when value.Equals("contains", StringComparison.Ordinal) => ComparisonOperator.Contains,
+            _ when value.Equals("startswith", StringComparison.Ordinal) => ComparisonOperator.StartsWith,
+            _ when value.Equals("endswith", StringComparison.Ordinal) => ComparisonOperator.EndsWith,
             _ => throw new QueryException(
                 QueryErrorCode.UnsupportedOperator,
                 $"Operator '{value.ToString()}' is not implemented.",

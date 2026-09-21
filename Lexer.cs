@@ -62,6 +62,7 @@ class Lexer
                     _ when value.Equals("true", StringComparison.Ordinal) ||
                            value.Equals("false", StringComparison.Ordinal) => TokenType.BooleanLiteral,
                     _ when value.Equals("null", StringComparison.Ordinal) => TokenType.NullLiteral,
+                    _ when value.Equals("not", StringComparison.Ordinal) => TokenType.NotOperator,
                     _ => TokenType.Identifier,
                 };
 
@@ -71,7 +72,10 @@ class Lexer
                     position));
                 continue;
             }
-            if (IsNumber(c))
+            // Angka boleh diawali '-' bila langsung diikuti digit (-10, -1.5).
+            // Bahasa ini tidak punya operator '-', jadi tidak ada ambiguitas.
+            if (IsNumber(c) ||
+                (c == '-' && position + 1 < text.Length && IsNumber(text[position + 1])))
             {
                 int start = position++;
 
@@ -104,9 +108,20 @@ class Lexer
             {
                 int start = position++;
 
-                while (position < text.Length &&
-                       text[position] != '\'')
+                while (position < text.Length)
                 {
+                    if (text[position] == '\'')
+                    {
+                        // '' di dalam string adalah satu tanda kutip, bukan akhir string.
+                        if (position + 1 < text.Length && text[position + 1] == '\'')
+                        {
+                            position += 2;
+                            continue;
+                        }
+
+                        break;
+                    }
+
                     position++;
                 }
 
@@ -203,7 +218,11 @@ class Lexer
         || value.Equals("gte", StringComparison.Ordinal)
         || value.Equals("lt", StringComparison.Ordinal)
         || value.Equals("lte", StringComparison.Ordinal)
-        || value.Equals("neq", StringComparison.Ordinal);
+        || value.Equals("neq", StringComparison.Ordinal)
+        || value.Equals("in", StringComparison.Ordinal)
+        || value.Equals("contains", StringComparison.Ordinal)
+        || value.Equals("startswith", StringComparison.Ordinal)
+        || value.Equals("endswith", StringComparison.Ordinal);
     private static bool IsLogicalOperator(ReadOnlySpan<char> value) =>
         value.Equals("or", StringComparison.Ordinal)
         || value.Equals("and", StringComparison.Ordinal);

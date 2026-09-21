@@ -18,5 +18,6 @@ public enum TokenType
     Colon,
     Number,
     BooleanLiteral,
-    NullLiteral
+    NullLiteral,
+    NotOperator
 }

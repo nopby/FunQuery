@@ -93,7 +93,7 @@ public class AdversarialInputTests
     private static readonly string[] Fragments =
     [
         "$source", "$filter", "$x", "(", ")", "[", "]", "{", "}", ",", ":", ".", " ",
-        "id", "name", "eq", "neq", "gt", "and", "or", "1", "2.5", "007", "'x'", "'", "#", "\"", "true", "false", "null",
+        "id", "name", "eq", "neq", "gt", "and", "or", "1", "2.5", "007", "'x'", "'", "#", "\"", "true", "false", "null", "not", "in", "contains", "startswith", "endswith", "-1", "-", "''", "-2.5",
     ];
 
     private static readonly string[] ValidQueries =
@@ -102,6 +102,8 @@ public class AdversarialInputTests
         "$source([{id: 1}]).$filter(id gte 1 and id lt 5 or id neq 3)",
         "($source([{a: 1.5, b: 'x'}])).$filter(a gt 1)",
         "$source([{id: 1, name: null}, {id: 2, name: 'x'}]).$filter(name neq null and id lte 2)",
+        "$source([{id: -1, name: 'it''s'}, {id: 2, name: 'x'}]).$filter(not name contains 'z' and id in [-1, 2])",
+        "$source([{'first-name': 'Ana', n: -1.5}]).$filter(n lt 0 or 'A' startswith 'A')",
     ];
 
     private static readonly QueryEngine Engine = new();

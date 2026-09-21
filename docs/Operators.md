@@ -19,16 +19,13 @@ identifiers.
 | `lte`        | less than or equal         | two ordered values| `bool` | v1     |
 | `and`        | logical and                | two `bool`        | `bool` | v1     |
 | `or`         | logical or                 | two `bool`        | `bool` | v1     |
-| `not`        | logical not                | one `bool`        | `bool` | M3     |
-| `in`         | membership                 | scalar, array     | `bool` | M3     |
-| `contains`   | substring test             | two `string`      | `bool` | M3     |
-| `startswith` | prefix test                | two `string`      | `bool` | M3     |
-| `endswith`   | suffix test                | two `string`      | `bool` | M3     |
+| `not`        | logical not                | one `bool`        | `bool` | v1     |
+| `in`         | membership                 | scalar, array     | `bool` | v1     |
+| `contains`   | substring test             | two `string`      | `bool` | v1     |
+| `startswith` | prefix test                | two `string`      | `bool` | v1     |
+| `endswith`   | suffix test                | two `string`      | `bool` | v1     |
 
 A *scalar* is a number, string, or bool. An *ordered value* is a number or a string.
-
-Operators marked M3 are specified here so that providers can plan for them. They are not implemented yet, and the
-analyzer rejects them until then.
 
 ## Precedence and grouping
 
@@ -37,13 +34,18 @@ From tightest to loosest:
 | Level | Operators                     | Associativity |
 | ----- | ----------------------------- | ------------- |
 | 1     | `( ... )` grouping            |               |
-| 2     | `not` (M3)                    | prefix        |
-| 3     | `eq neq gt gte lt lte`        | not chainable |
+| 2     | `eq neq gt gte lt lte in contains startswith endswith` | not chainable |
+| 3     | `not`                         | prefix        |
 | 4     | `and`                         | left          |
 | 5     | `or`                          | left          |
 
+* `not` applies to a whole comparison, so `not id eq 1` means `not (id eq 1)`. It binds tighter than `and`:
+  `not a eq 1 and b eq 2` means `(not a eq 1) and (b eq 2)`. `not` may be repeated (`not not a eq 1`).
 * `a eq 1 or b eq 2 and c eq 3` means `a eq 1 or (b eq 2 and c eq 3)`.
-* Comparison operators do not chain. `id eq 1 eq 2` is a syntax error (`UNEXPECTED_TOKEN`). Use `and`.
+* Comparison operators do not chain. `id eq 1 eq 2` and `name contains 'a' contains 'b'` are syntax errors
+  (`UNEXPECTED_TOKEN`). Use `and`.
+* `not` cannot be an operand of a comparison: `id eq not 1` is a syntax error. Use parentheses:
+  `(not a eq 1) eq true`.
 * There is no guaranteed evaluation order and no guaranteed short-circuit. Operands never have side effects,
   so a provider may reorder or skip evaluation.
 
@@ -124,7 +126,7 @@ Comparisons are **two-valued**.
 
 ## Logical operators
 
-`and`, `or`, and (Milestone 3) `not`.
+`and`, `or`, and `not`.
 
 * Operands must be `bool`. Anything else is `TYPE_MISMATCH` (`Left side of logical expression must be Boolean.`).
 * `and` binds tighter than `or`. Both are left-associative.
@@ -132,19 +134,51 @@ Comparisons are **two-valued**.
 * A `bool` value that is null counts as false, both as an operand of `and` and `or` and as the predicate of
   `$filter`.
 
-## Planned operators (Milestone 3)
+## Negation, membership, and text operators
 
-| Operator     | Operands            | Behavior |
-| ------------ | ------------------- | -------- |
-| `not`        | `bool`              | negation. `not id eq 1` means `not (id eq 1)` |
-| `in`         | scalar, array       | true if the scalar equals any element under `eq`. The element type must be comparable with the scalar. A null scalar is true only if the array contains null. `float` and `double` are rejected, as for `eq` |
-| `contains`   | `string`, `string`  | ordinal, case-sensitive substring test |
-| `startswith` | `string`, `string`  | ordinal, case-sensitive prefix test |
-| `endswith`   | `string`, `string`  | ordinal, case-sensitive suffix test |
+### `not`
 
-For `contains`, `startswith`, and `endswith`, a null operand gives false. Providers that use `LIKE` must
-escape the wildcard characters (`%`, `_`, and the escape character) in the operand, so that the text is
-matched literally.
+* Operand: `bool`. Anything else is `TYPE_MISMATCH` (`Operand of 'not' must be Boolean, got int.`), pointing at
+  the operand.
+* A null `bool` counts as false, so `not` of a null boolean is true.
+* Provider: `not` must keep two-valued logic. Translate the operand so that it can never be "unknown" before
+  negating it, for example by treating a null boolean as false.
+
+### `in`
+
+`value in [a, b, c]` is true when `value` equals one of the elements under `eq`. The right side may be an array
+literal or an array field of the row: `'a' in tags`.
+
+| Rule | Detail |
+| ---- | ------ |
+| Left operand | a scalar (number, string, bool, or `null`). An array or object is `TYPE_MISMATCH` |
+| Right operand | an array, or `any`. Anything else is `TYPE_MISMATCH` (`needs an array on the right side`) |
+| Element type | must be a scalar and comparable with the left operand under `eq`: numbers mix, other types must match. `[]` has no element type, so `x in []` is valid and always false |
+| Numbers | compared by value, as for `eq`: `id in [1.0, 2.5]` matches `id` of `1` |
+| Null | follows `eq`: `null in [null]` is true, `x in [1, null]` is true for a null `x`, and `x in [1]` is false for a null `x` |
+| `float`, `double` | rejected, because `in` tests equality. Testing against `null` is allowed |
+| Result | `bool`. Evaluates to false when the right side is null |
+
+Provider: `in` translates to an `IN (...)` list, or to `IN` over a subquery when the right side is another
+source. Null members need `IS NULL` alongside the list, because SQL `IN` never matches null. An empty list must
+give false, and SQL does not allow `IN ()`, so the provider must emit a constant false.
+
+### `contains`, `startswith`, `endswith`
+
+`text contains part`, `text startswith prefix`, and `text endswith suffix` test a string.
+
+| Rule | Detail |
+| ---- | ------ |
+| Operands | both `string` (or `null`, or `any`). A number, bool, array, or object is `TYPE_MISMATCH` (`requires string operands, got int`), pointing at the offending operand |
+| Comparison | ordinal and case-sensitive, never dependent on the culture of the server |
+| Empty text | every string contains, starts with, and ends with `''` |
+| Null | a null operand gives false, never an error. `not name contains 'x'` is therefore true when `name` is null |
+| Result | `bool` |
+
+Provider: a provider that translates to `LIKE` must escape the wildcard characters (`%`, `_`, and the escape
+character itself) in the operand, so that the text is matched literally: `name contains '50%'` must not match
+`'500'`. It must also use the binary collation required for [strings](#strings), because most default
+collations are case-insensitive and would change the result.
 
 ## Error reference
 

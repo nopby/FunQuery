@@ -50,6 +50,9 @@ public static class SemanticAnalyzer
             LogicalExpression logical =>
                 AnalyzeLogical(logical, context),
 
+            NotExpression negation =>
+                AnalyzeNot(negation, context),
+
             CallExpression call =>
                 AnalyzeCall(call, context),
 
@@ -164,6 +167,25 @@ public static class SemanticAnalyzer
                 QueryErrorCode.InternalError,
                 "Right side of comparison has no semantic type.");
 
+        if (expression.Operator is ComparisonOperator.In)
+        {
+            ValidateIn(context, expression, leftType, rightType);
+            expression.SemanticType = SemanticTypeOptions.Boolean;
+
+            return expression;
+        }
+
+        if (expression.Operator is
+            ComparisonOperator.Contains or
+            ComparisonOperator.StartsWith or
+            ComparisonOperator.EndsWith)
+        {
+            ValidateText(expression, leftType, rightType);
+            expression.SemanticType = SemanticTypeOptions.Boolean;
+
+            return expression;
+        }
+
         if (!context.CanCompare(
                 leftType,
                 rightType))
@@ -182,6 +204,119 @@ public static class SemanticAnalyzer
             SemanticTypeOptions.Boolean;
 
         return expression;
+    }
+
+    private static NotExpression AnalyzeNot(
+        NotExpression expression,
+        SemanticContext context)
+    {
+        Analyze(expression.Operand, context);
+
+        var operandType =
+            expression.Operand.SemanticType
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
+                "Operand of 'not' has no semantic type.");
+
+        if (operandType is not BooleanType)
+        {
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                $"Operand of 'not' must be Boolean, got {operandType.Name}.",
+                expression.Operand.Span);
+        }
+
+        expression.SemanticType = SemanticTypeOptions.Boolean;
+
+        return expression;
+    }
+
+    /// <summary>
+    /// in: nilai skalar di kiri, array di kanan. Elemen array harus bisa dibandingkan dengan nilai itu.
+    /// Lihat docs/Operators.md.
+    /// </summary>
+    private static void ValidateIn(
+        SemanticContext context,
+        ComparisonExpression expression,
+        SemanticType leftType,
+        SemanticType rightType)
+    {
+        if (!SemanticContext.IsScalar(leftType))
+        {
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                $"Operator 'in' cannot be applied to {leftType.Name}.",
+                expression.Left.Span);
+        }
+
+        if (rightType is AnyType)
+            return;
+
+        if (rightType is not ArrayType array)
+        {
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                $"Operator 'in' needs an array on the right side, got {rightType.Name}.",
+                expression.Right.Span);
+        }
+
+        // [] tidak punya tipe elemen: "x in []" selalu false dan selalu valid.
+        if (array.Type is UnknownType)
+            return;
+
+        if (!SemanticContext.IsScalar(array.Type))
+        {
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                $"Operator 'in' cannot be applied to an array of {array.Type.Name}.",
+                expression.Right.Span);
+        }
+
+        if (!context.CanCompare(leftType, array.Type))
+        {
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                $"Cannot compare {leftType.Name} with {array.Type.Name}.",
+                expression.Span);
+        }
+
+        var hasNull = leftType is NullType || array.Type is NullType;
+
+        if (!hasNull &&
+            (SemanticContext.IsApproximate(leftType) ||
+             SemanticContext.IsApproximate(array.Type)))
+        {
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                "Operator 'in' is not supported for float and double, " +
+                "because it tests equality.",
+                expression.Span);
+        }
+    }
+
+    /// <summary>contains, startswith, endswith: kedua operand harus string.</summary>
+    private static void ValidateText(
+        ComparisonExpression expression,
+        SemanticType leftType,
+        SemanticType rightType)
+    {
+        var keyword = ToKeyword(expression.Operator);
+
+        if (leftType is not (StringType or NullType or AnyType))
+        {
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                $"Operator '{keyword}' requires string operands, got {leftType.Name}.",
+                expression.Left.Span);
+        }
+
+        if (rightType is not (StringType or NullType or AnyType))
+        {
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                $"Operator '{keyword}' requires string operands, got {rightType.Name}.",
+                expression.Right.Span);
+        }
     }
 
     /// <summary>
@@ -258,6 +393,10 @@ public static class SemanticAnalyzer
             ComparisonOperator.GreaterThanOrEqual => "gte",
             ComparisonOperator.LessThan => "lt",
             ComparisonOperator.LessThanOrEqual => "lte",
+            ComparisonOperator.In => "in",
+            ComparisonOperator.Contains => "contains",
+            ComparisonOperator.StartsWith => "startswith",
+            ComparisonOperator.EndsWith => "endswith",
             _ => op.ToString(),
         };
 
@@ -462,7 +601,7 @@ public static class SemanticAnalyzer
 
         if (text.Contains('.'))
         {
-            if (decimal.TryParse(text, NumberStyles.AllowDecimalPoint,
+            if (decimal.TryParse(text, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign,
                     CultureInfo.InvariantCulture, out _))
                 return SemanticTypeOptions.Decimal;
 
@@ -472,14 +611,14 @@ public static class SemanticAnalyzer
                 expression.Token);
         }
 
-        if (int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out _))
+        if (int.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _))
             return SemanticTypeOptions.Int;
 
-        if (long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out _))
+        if (long.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _))
             return SemanticTypeOptions.Long;
 
         // Bilangan bulat di atas long masih muat sebagai decimal
-        if (decimal.TryParse(text, NumberStyles.None,
+        if (decimal.TryParse(text, NumberStyles.AllowLeadingSign,
                 CultureInfo.InvariantCulture, out _))
             return SemanticTypeOptions.Decimal;
 

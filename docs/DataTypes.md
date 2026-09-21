@@ -18,8 +18,10 @@ Type names below are the names used in error messages (`Cannot compare string wi
 | `array`   | `[1, 2, 3]`                | ordered list of one element type| v1     |
 | `object`  | `{id: 1, name: 'x'}`       | ordered set of named fields     | v1     |
 
-`true`, `false`, and `null` are reserved words. They cannot be used as field names, and they are
-case-sensitive: `TRUE` and `Null` are ordinary identifiers.
+These words are reserved: `true`, `false`, `null`, `not`, `in`, `contains`, `startswith`, `endswith`, and the
+operators `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `and`, `or`. They cannot be written as unquoted field names.
+They are case-sensitive: `TRUE` and `Null` are ordinary identifiers. A reserved word can still be a field
+name when it is written as a quoted key (see [Objects](#objects)).
 
 `float` and `double` are **not language types in v1**. See [Floating point](#floating-point).
 
@@ -30,7 +32,8 @@ literal. Its type is decided by the semantic analyzer from the written value, ne
 
 ### Literal syntax
 
-A number is one or more digits, optionally followed by a `.` and one or more digits.
+A number is one or more digits, optionally followed by a `.` and one or more digits, and optionally
+preceded by a `-` that is written directly before the first digit.
 
 | Written         | Valid | Notes                                              |
 | --------------- | ----- | -------------------------------------------------- |
@@ -38,10 +41,13 @@ A number is one or more digits, optionally followed by a `.` and one or more dig
 | `1.5`, `0.10`   | yes   |                                                    |
 | `1.`, `.5`      | no    | write `1.0` and `0.5`                              |
 | `1e5`, `2m`, `1.5f` | no | no exponent and no type suffix                    |
-| `+1`, `-1`      | no    | negative numbers arrive in Milestone 3             |
+| `-10`, `-1.5`   | yes   | the `-` belongs to the number; there is no subtraction |
+| `- 1`, `--1`, `-a` | no | a `-` must directly precede a digit                |
+| `+1`            | no    | there is no `+` sign                               |
 
 A `.` belongs to the number only when a digit follows it, so `$take(1).$filter(...)` is a chain and not a
-decimal.
+decimal. Because there is no subtraction, `1-2` is not an expression: it is the two numbers `1` and `-2`,
+and it is a syntax error wherever a single value is expected.
 
 ### Type inference
 
@@ -54,7 +60,8 @@ decimal.
 | does not fit `decimal`                           | error `NUMBER_OUT_OF_RANGE` |
 
 Examples: `2147483647` is `int`, `2147483648` is `long`, `9223372036854775807` is `long`,
-`99999999999999999999` is `decimal`, `1.5` is `decimal`.
+`99999999999999999999` is `decimal`, `1.5` is `decimal`. The sign is part of the literal:
+`-2147483648` is `int`, `-2147483649` is `long`, and `-9223372036854775809` is `decimal`.
 
 ### Numeric comparison across types
 
@@ -93,7 +100,9 @@ How a provider maps its schema types to language types is decided when providers
 
 * Written between single quotes: `'hello'`. A string may contain spaces and any Unicode character.
 * Double quotes are not string delimiters.
-* Escaping a single quote inside a string (`'it''s'`) arrives in Milestone 3.
+* A single quote inside a string is written twice: `'it''s'` is the text `it's`, `''''` is a single quote,
+  and `''` is the empty string. There are no other escape sequences: a backslash is an ordinary character.
+  A string with a quote that is never closed is `UNTERMINATED_STRING`.
 * Comparison is **ordinal and case-sensitive**: `'a' eq 'A'` is false, and ordering compares UTF-16 code
   units. It never depends on the culture of the server.
 * A string and a number are never compared. `name gt 1` is `TYPE_MISMATCH`.
@@ -137,8 +146,10 @@ SQL uses three-valued logic. A SQL provider must translate to the two-valued beh
 
 * Written `{name: value, ...}`. Every entry must have the form `name: value`. Trailing commas are rejected.
   `{}` is allowed and is an object without fields.
-* Field names are identifiers: ASCII letters, digits, and `_`, not starting with a digit. They are
-  case-sensitive.
+* A field name is an identifier (ASCII letters, digits, and `_`, not starting with a digit) or a string.
+  Use a string key for names that are not identifiers or that are reserved words: `{'first-name': 'Ana',
+  'in': 1}`. A quoted key names the same field as the unquoted identifier, so `{'id': 1}` has the field `id`
+  and `{'a': 1, a: 2}` is a duplicate. Field names are case-sensitive.
 * Duplicate names in one object are rejected (`DUPLICATE_FIELD`).
 * In an array of objects, every object must currently have the same set of fields with compatible types.
   Field order does not matter. Sources with missing fields arrive in Milestone 3.

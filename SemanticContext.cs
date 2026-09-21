@@ -60,7 +60,9 @@ public sealed class SemanticContext
     // ASUMSI: NamedExpression punya properti `Token Name`.
     // Sesuaikan jika nama/tipe propertinya berbeda.
     public string GetNamedName(NamedExpression expression) =>
-        GetText(expression.Name);
+        expression.Name.Type == TokenType.StringLiteral
+            ? StringLiteral.Unquote(_source.Span[expression.Name.StartPosition..expression.Name.EndPosition])
+            : GetText(expression.Name);
 
     // ------------------------------------------------------------------
     // Scope

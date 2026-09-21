@@ -41,6 +41,7 @@ public sealed class InMemoryCompiler
             BlockExpression block => CompileObject(block),
             ComparisonExpression comparison => CompileComparison(comparison),
             LogicalExpression logical => CompileLogical(logical),
+            NotExpression negation => CompileNot(negation),
             CallExpression call => CompileCall(call),
             _ => throw new QueryException(
                 QueryErrorCode.InternalError,
@@ -58,8 +59,8 @@ public sealed class InMemoryCompiler
         switch (expression.Token.Type)
         {
             case TokenType.StringLiteral:
-                var text = TextOf(expression.Token);
-                constant = text[1..^1];
+                constant = StringLiteral.Unquote(
+                    _source.Span[expression.Token.StartPosition..expression.Token.EndPosition]);
                 break;
 
             case TokenType.BooleanLiteral:
@@ -92,9 +93,9 @@ public sealed class InMemoryCompiler
         // dan int atau long diam-diam berubah menjadi decimal.
         return expression.SemanticType switch
         {
-            IntType => (object)int.Parse(text, NumberStyles.None, CultureInfo.InvariantCulture),
-            LongType => (object)long.Parse(text, NumberStyles.None, CultureInfo.InvariantCulture),
-            DecimalType => (object)decimal.Parse(text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture),
+            IntType => (object)int.Parse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture),
+            LongType => (object)long.Parse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture),
+            DecimalType => (object)decimal.Parse(text, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture),
             _ => throw new QueryException(
                 QueryErrorCode.InternalError,
                 "Number literal has no numeric semantic type. Was the query analyzed?",
@@ -143,7 +144,9 @@ public sealed class InMemoryCompiler
                     expression.Expressions[i].Span);
             }
 
-            keys[i] = TextOf(named.Name);
+            keys[i] = named.Name.Type == TokenType.StringLiteral
+                ? StringLiteral.Unquote(_source.Span[named.Name.StartPosition..named.Name.EndPosition])
+                : TextOf(named.Name);
             values[i] = Compile(named.Value);
         }
 
@@ -185,6 +188,18 @@ public sealed class InMemoryCompiler
             ComparisonOperator.LessThanOrEqual =>
                 Ordered(left, right, static c => c <= 0),
 
+            ComparisonOperator.In =>
+                element => ValueOperations.In(left(element), right(element)) ? True : False,
+
+            ComparisonOperator.Contains =>
+                element => ValueOperations.Contains(left(element), right(element)) ? True : False,
+
+            ComparisonOperator.StartsWith =>
+                element => ValueOperations.StartsWith(left(element), right(element)) ? True : False,
+
+            ComparisonOperator.EndsWith =>
+                element => ValueOperations.EndsWith(left(element), right(element)) ? True : False,
+
             _ => throw new QueryException(
                 QueryErrorCode.NotSupported,
                 $"Operator '{expression.Operator}' is not supported by the in-memory provider.",
@@ -224,6 +239,14 @@ public sealed class InMemoryCompiler
                 $"Operator '{expression.Operator}' is not supported by the in-memory provider.",
                 expression.Span),
         };
+    }
+
+    // null dihitung false, jadi not null bernilai true.
+    private Func<object?, object?> CompileNot(NotExpression expression)
+    {
+        var operand = Compile(expression.Operand);
+
+        return element => ValueOperations.IsTrue(operand(element)) ? False : True;
     }
 
     private Func<object?, object?> CompileCall(CallExpression call)

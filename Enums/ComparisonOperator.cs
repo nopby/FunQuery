@@ -12,4 +12,8 @@ public enum ComparisonOperator
     GreaterThanOrEqual,
     LessThan,
     LessThanOrEqual,
+    In,
+    Contains,
+    StartsWith,
+    EndsWith,
 }
