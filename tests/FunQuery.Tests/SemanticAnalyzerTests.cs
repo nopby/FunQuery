@@ -15,12 +15,11 @@ public class SemanticAnalyzerTests
     private static void AssertFails(
         QueryErrorCode expected,
         string input,
-        IReadOnlyDictionary<string, SemanticType>? identifiers = null,
         QueryLimits? limits = null,
         FunctionRegistry? functions = null) =>
         QueryAssert.Fails(
             expected,
-            () => QueryPipeline.Analyze(input, identifiers, limits, functions));
+            () => QueryPipeline.Analyze(input, limits, functions));
 
     private static SemanticType ElementTypeOf(string literal)
     {
@@ -36,13 +35,8 @@ public class SemanticAnalyzerTests
     [Fact]
     public void ProgramSample_IsValid()
     {
-        var identifiers = QueryPipeline.Identifiers(
-            ("id", SemanticTypeOptions.Int),
-            ("name", SemanticTypeOptions.String));
-
         var result = QueryPipeline.Analyze(
-            "$source([{id: 1, name: 'hello'}, {id: 2, name: 'world'}]).$filter(id eq 2.1)",
-            identifiers);
+            "$source([{id: 1, name: 'hello'}, {id: 2, name: 'world'}]).$filter(id eq 2.1)");
 
         Assert.IsType<ArrayType>(result.SemanticType);
     }
@@ -216,56 +210,6 @@ public class SemanticAnalyzerTests
     {
         AssertFails(QueryErrorCode.InvalidArgumentCount, People + ".$filter()");
         AssertFails(QueryErrorCode.InvalidArgumentCount, Filter("id eq 1, id eq 2"));
-    }
-
-    // ------------------------------------------------------------------
-    // Identifier scopes
-    // ------------------------------------------------------------------
-
-    [Fact]
-    [Trait("Temporary", "Removed with the global identifier mechanism in M3")]
-    public void GlobalIdentifiers_AreVisibleInsideFilter()
-    {
-        var identifiers = QueryPipeline.Identifiers(("limit", SemanticTypeOptions.Int));
-
-        var result = QueryPipeline.Analyze(Filter("id lt limit"), identifiers);
-
-        Assert.IsType<ArrayType>(result.SemanticType);
-    }
-
-    [Fact]
-    [Trait("Temporary", "Removed with the global identifier mechanism in M3")]
-    public void GlobalIdentifier_IsUnknownUntilItIsRegistered()
-    {
-        AssertFails(QueryErrorCode.UnknownIdentifier, Filter("id lt limit"));
-    }
-
-    [Fact]
-    [Trait("Temporary", "Removed with the global identifier mechanism in M3")]
-    public void ElementFields_ShadowGlobalIdentifiers()
-    {
-        var identifiers = QueryPipeline.Identifiers(
-            ("id", SemanticTypeOptions.String),
-            ("limit", SemanticTypeOptions.Int));
-
-        // 'id' must resolve to the element field (Int), not to the global (String).
-        // Otherwise 'id lt limit' would compare String with Int and fail.
-        var result = QueryPipeline.Analyze(Filter("id lt limit"), identifiers);
-
-        Assert.IsType<ArrayType>(result.SemanticType);
-    }
-
-    [Fact]
-    [Trait("Temporary", "Removed with the global identifier mechanism in M3")]
-    public void GlobalIdentifier_CanFeedAnObjectField()
-    {
-        var identifiers = QueryPipeline.Identifiers(("limit", SemanticTypeOptions.Int));
-
-        var result = QueryPipeline.Analyze("$source([{id: limit}])", identifiers);
-
-        var array = Assert.IsType<ArrayType>(result.SemanticType);
-        var element = Assert.IsType<ObjectType>(array.Type);
-        Assert.Equal(SemanticTypeOptions.Int, element.Fields["id"]);
     }
 
     // ------------------------------------------------------------------

@@ -1,0 +1,1273 @@
+diff --git a/CoreFunctions.cs b/CoreFunctions.cs
+index ca8c83a..8d00d46 100644
+--- a/CoreFunctions.cs
++++ b/CoreFunctions.cs
+@@ -20,6 +20,17 @@ public sealed class CoreFunctions : IQueryExtension
+             ReturnTypeFromArguments = (_, args) => args[0],
+         });
+ 
++        registry.Add(new FunctionDefinition
++        {
++            // $let(@nama, nilai): dianalisis dan dieksekusi secara khusus (lihat
++            // SemanticAnalyzer.AnalyzeLet dan CoreInMemoryFunctions.Let). Didaftarkan di sini
++            // hanya supaya "$let" dikenal sebagai nama function (whitelist, pesan
++            // UNKNOWN_FUNCTION yang konsisten), bukan supaya validasi generik berlaku padanya.
++            Name = "$let",
++            Parameters = [],
++            TargetRule = TargetRule.Optional,
++        });
++
+         registry.Add(new FunctionDefinition
+         {
+             Name = "$filter",
+diff --git a/Enums/AstExpressionType.cs b/Enums/AstExpressionType.cs
+index 337c760..6186e67 100644
+--- a/Enums/AstExpressionType.cs
++++ b/Enums/AstExpressionType.cs
+@@ -13,5 +13,6 @@ public enum AstExpressionType
+     Block,
+     Named,
+     Call,
+-    Not
++    Not,
++    Variable
+ }
+diff --git a/Enums/QueryErrorCode.cs b/Enums/QueryErrorCode.cs
+index c74b5fa..19c775b 100644
+--- a/Enums/QueryErrorCode.cs
++++ b/Enums/QueryErrorCode.cs
+@@ -28,6 +28,11 @@ public enum QueryErrorCode
+     NumberOutOfRange,
+     NotSupported,
+ 
++    // Variable dan $let
++    UndefinedVariable,
++    VariableRedefined,
++    InvalidLetTarget,
++
+     // Batas keamanan (dipakai saat batas-batas itu diimplementasikan)
+     InputTooLong,
+     MaxDepthExceeded,
+diff --git a/Execution/CoreInMemoryFunctions.cs b/Execution/CoreInMemoryFunctions.cs
+index 21ed0b4..2b6ec43 100644
+--- a/Execution/CoreInMemoryFunctions.cs
++++ b/Execution/CoreInMemoryFunctions.cs
+@@ -6,8 +6,49 @@ namespace FunQuery.Execution;
+ internal static class CoreInMemoryFunctions
+ {
+     /// <summary>$source(array): sumber data dari array inline.</summary>
+-    public static Func<object?, object?> Source(InMemoryCompiler compiler, CallExpression call) =>
+-        compiler.Compile(call.Arguments[0]);
++    public static Func<object?, object?> Source(InMemoryCompiler compiler, CallExpression call)
++    {
++        // $source tidak boleh punya target data (TargetRule.Forbidden), tapi $let boleh
++        // mendahuluinya (mis. $let(@x,1).$source(...)) untuk mengikat variable. Rantai itu
++        // harus tetap dikompilasi dan dijalankan sekali di sini demi efek sampingnya
++        // (mengisi variable), walau nilainya sendiri dibuang. Function lain dengan
++        // TargetRule.Forbidden perlu pola yang sama.
++        if (call.Target is not null)
++        {
++            var pass = compiler.Compile(call.Target);
++            pass(null);
++        }
++
++        return compiler.Compile(call.Arguments[0]);
++    }
++
++    /// <summary>
++    /// $let(@nama, nilai): mengikat @nama ke nilai (dihitung sekali, dengan element=null) lalu
++    /// meneruskan data targetnya tanpa perubahan. Lihat docs/Variables.md.
++    /// </summary>
++    public static Func<object?, object?> Let(InMemoryCompiler compiler, CallExpression call)
++    {
++        var targetFn = call.Target is null
++            ? static _ => null
++            : compiler.Compile(call.Target);
++
++        var name = compiler.GetVariableName((VariableExpression)call.Arguments[0]);
++
++        // Snapshot/restore: $let bersarang di dalam nilai ini sendiri tidak boleh bocor
++        // ke luar, sama seperti aturan tipe di SemanticAnalyzer.AnalyzeLet.
++        var snapshot = compiler.SnapshotVariables();
++
++        var valueFn = compiler.Compile(call.Arguments[1]);
++
++        // Eager: dihitung sekali sekarang, dengan element=null (tidak ada baris "saat ini"),
++        // bukan per baris. Ini yang membuat variable "sudah terwujud" (materialized).
++        var value = valueFn(null);
++
++        compiler.RestoreVariables(snapshot);
++        compiler.BindVariable(name, value);
++
++        return targetFn;
++    }
+ 
+     /// <summary>$filter(predicate): menyaring elemen. Predikat dihitung terhadap tiap elemen.</summary>
+     public static Func<object?, object?> Filter(InMemoryCompiler compiler, CallExpression call)
+diff --git a/Execution/InMemoryCompiler.cs b/Execution/InMemoryCompiler.cs
+index 01f16e8..58129ef 100644
+--- a/Execution/InMemoryCompiler.cs
++++ b/Execution/InMemoryCompiler.cs
+@@ -22,12 +22,46 @@ public sealed class InMemoryCompiler
+     private readonly ReadOnlyMemory<char> _source;
+     private readonly InMemoryFunctions _functions;
+ 
+-    internal InMemoryCompiler(ReadOnlyMemory<char> source, InMemoryFunctions functions)
++    // Nilai variable saat kompilasi. Dictionary datar, sama seperti tipe variable di analyzer;
++    // bertambah lewat $let, dan snapshot/restore menjaga scope tetap lexical ke depan.
++    private Dictionary<string, object?> _variables;
++
++    internal InMemoryCompiler(
++        ReadOnlyMemory<char> source,
++        InMemoryFunctions functions,
++        IReadOnlyDictionary<string, object?>? variables = null)
+     {
+         _source = source;
+         _functions = functions;
++        _variables = variables is null
++            ? new Dictionary<string, object?>(StringComparer.Ordinal)
++            : new Dictionary<string, object?>(variables, StringComparer.Ordinal);
+     }
+ 
++    // ------------------------------------------------------------------
++    // Variable (@nama)
++    // ------------------------------------------------------------------
++
++    internal string GetVariableName(VariableExpression expression) =>
++        TextOf(expression.Token)[1..];
++
++    internal object? ResolveVariable(string name) =>
++        _variables.TryGetValue(name, out var value)
++            ? value
++            // Seharusnya tidak pernah terjadi: analyzer sudah menolak variable yang tidak
++            // terdefinisi (UNDEFINED_VARIABLE) sebelum kompilasi dimulai.
++            : throw new QueryException(
++                QueryErrorCode.InternalError,
++                $"Variable '@{name}' has no runtime value. Was the query analyzed?");
++
++    internal void BindVariable(string name, object? value) => _variables[name] = value;
++
++    internal IReadOnlyDictionary<string, object?> SnapshotVariables() =>
++        new Dictionary<string, object?>(_variables, StringComparer.Ordinal);
++
++    internal void RestoreVariables(IReadOnlyDictionary<string, object?> snapshot) =>
++        _variables = new Dictionary<string, object?>(snapshot, StringComparer.Ordinal);
++
+     /// <summary>
+     /// Mengkompilasi sebuah ekspresi menjadi delegate yang menerima elemen saat ini
+     /// (null di luar konteks per-elemen) dan menghasilkan nilainya.
+@@ -37,6 +71,7 @@ public sealed class InMemoryCompiler
+         {
+             ValueExpression value => CompileValue(value),
+             IdentifierExpression identifier => CompileField(identifier),
++            VariableExpression variable => CompileVariable(variable),
+             ArrayExpression array => CompileArray(array),
+             BlockExpression block => CompileObject(block),
+             ComparisonExpression comparison => CompileComparison(comparison),
+@@ -103,6 +138,16 @@ public sealed class InMemoryCompiler
+         };
+     }
+ 
++    // Variable dibaca dari _variables saat delegate dipanggil, bukan saat dikompilasi:
++    // sebuah $filter yang dikompilasi sebelum $let-nya sendiri dieksekusi (belum terjadi
++    // di v1 karena urutan kompilasi mengikuti urutan chain) tetap membaca nilai yang benar.
++    private Func<object?, object?> CompileVariable(VariableExpression expression)
++    {
++        var name = GetVariableName(expression);
++
++        return _ => ResolveVariable(name);
++    }
++
+     private Func<object?, object?> CompileField(IdentifierExpression expression)
+     {
+         var name = TextOf(expression.Token);
+diff --git a/Execution/InMemoryFunctions.cs b/Execution/InMemoryFunctions.cs
+index 89224dc..3db8232 100644
+--- a/Execution/InMemoryFunctions.cs
++++ b/Execution/InMemoryFunctions.cs
+@@ -43,5 +43,6 @@ public sealed class InMemoryFunctions
+     public static InMemoryFunctions CreateDefault() =>
+         new InMemoryFunctions()
+             .Add("$source", CoreInMemoryFunctions.Source)
++            .Add("$let", CoreInMemoryFunctions.Let)
+             .Add("$filter", CoreInMemoryFunctions.Filter);
+ }
+diff --git a/Expressions/VariableExpression.cs b/Expressions/VariableExpression.cs
+new file mode 100644
+index 0000000..9b08b2f
+--- /dev/null
++++ b/Expressions/VariableExpression.cs
+@@ -0,0 +1,12 @@
++﻿using FunQuery.Enums;
++using FunQuery.SemanticTypes;
++
++namespace FunQuery.Expressions;
++
++/// <summary>Referensi ke variable, mis. @min. Token mencakup '@'.</summary>
++public sealed record VariableExpression(Token Token) : BaseExpression
++{
++    public override AstExpressionType Type => AstExpressionType.Variable;
++
++    public override SemanticType? SemanticType { get; set; }
++}
+diff --git a/Extensions/QueryErrorCodeExtensions.cs b/Extensions/QueryErrorCodeExtensions.cs
+index 6196157..e6e743e 100644
+--- a/Extensions/QueryErrorCodeExtensions.cs
++++ b/Extensions/QueryErrorCodeExtensions.cs
+@@ -28,6 +28,10 @@ public static class QueryErrorCodeExtensions
+         QueryErrorCode.NumberOutOfRange => "NUMBER_OUT_OF_RANGE",
+         QueryErrorCode.NotSupported => "NOT_SUPPORTED",
+ 
++        QueryErrorCode.UndefinedVariable => "UNDEFINED_VARIABLE",
++        QueryErrorCode.VariableRedefined => "VARIABLE_REDEFINED",
++        QueryErrorCode.InvalidLetTarget => "INVALID_LET_TARGET",
++
+         QueryErrorCode.InputTooLong => "INPUT_TOO_LONG",
+         QueryErrorCode.MaxDepthExceeded => "MAX_DEPTH_EXCEEDED",
+         QueryErrorCode.TooManyTokens => "TOO_MANY_TOKENS",
+diff --git a/Lexer.cs b/Lexer.cs
+index d0d436b..e6f1bc8 100644
+--- a/Lexer.cs
++++ b/Lexer.cs
+@@ -45,6 +45,31 @@ class Lexer
+                 continue;
+             }
+ 
++            if (c == '@')
++            {
++                int startPosition = position++;
++
++                // '@' harus langsung diikuti setidaknya satu karakter identifier: '@' saja
++                // atau '@1x' tidak valid.
++                if (position >= text.Length || !IsIdentifierStart(text[position]))
++                {
++                    throw new QueryException(
++                        QueryErrorCode.UnexpectedCharacter,
++                        $"Unexpected character '{c}'.",
++                        startPosition, 1);
++                }
++
++                while (position < text.Length && IsIdentifierPart(text[position]))
++                    position++;
++
++                tokenBuffer.Add(new Token(
++                    TokenType.Variable,
++                    startPosition,
++                    position));
++
++                continue;
++            }
++
+             if (IsIdentifierStart(c))
+             {
+                 int startPosition = position++;
+diff --git a/Parser.cs b/Parser.cs
+index 827b8de..fab9ad3 100644
+--- a/Parser.cs
++++ b/Parser.cs
+@@ -220,6 +220,7 @@ public static class Parser
+             TokenType.Number => ParseValue(tokens, TokenType.Number, ref position),
+             TokenType.BooleanLiteral => ParseValue(tokens, TokenType.BooleanLiteral, ref position),
+             TokenType.NullLiteral => ParseValue(tokens, TokenType.NullLiteral, ref position),
++            TokenType.Variable => ParseVariable(tokens, ref position),
+             TokenType.OpenRoundParenthesis => ParseGroupedExpression(source, tokens, ref position, ref guard),
+             TokenType.Call => ParseFunction(source, tokens, ref position, ref guard),
+             TokenType.OpenSquareParenthesis => ParseArray(source, tokens, ref position, ref guard),
+@@ -457,6 +458,18 @@ public static class Parser
+ 
+         return new IdentifierExpression(token) { Span = SourceSpan.From(token) };
+     }
++
++    private static VariableExpression ParseVariable(
++        ReadOnlySpan<Token> tokens,
++        ref int position)
++    {
++        var token = Consume(
++            tokens,
++            ref position,
++            TokenType.Variable);
++
++        return new VariableExpression(token) { Span = SourceSpan.From(token) };
++    }
+     private static BaseExpression ParseLogical(
+         BaseExpression left,
+         LogicalOperator op,
+diff --git a/QueryEngine.cs b/QueryEngine.cs
+index 1fc4a12..8447efd 100644
+--- a/QueryEngine.cs
++++ b/QueryEngine.cs
+@@ -19,9 +19,6 @@ public readonly record struct QueryResult(SemanticType Type, object? Value)
+ /// </summary>
+ public sealed class QueryEngine
+ {
+-    private static readonly IReadOnlyDictionary<string, SemanticType> NoIdentifiers =
+-        new Dictionary<string, SemanticType>();
+-
+     private readonly FunctionRegistry _functions;
+     private readonly InMemoryInterpreter _interpreter;
+ 
+@@ -53,7 +50,7 @@ public sealed class QueryEngine
+ 
+         var parsed = Parser.Parse(query, buffer.Span, Limits);
+ 
+-        var context = new SemanticContext(query.AsMemory(), NoIdentifiers, _functions, Limits);
++        var context = new SemanticContext(query.AsMemory(), _functions, Limits);
+         var analyzed = SemanticAnalyzer.Analyze(parsed, context);
+ 
+         var value = _interpreter.Execute(analyzed, query.AsMemory());
+diff --git a/README.md b/README.md
+index f7e58d8..0a31729 100644
+--- a/README.md
++++ b/README.md
+@@ -97,9 +97,9 @@ The roadmap is divided into vertical milestones. Each milestone has a concrete d
+ | Milestone | Name                     | Status |
+ | --------- | ------------------------ | ------ |
+ | 0         | Fondasi                  | ✅     |
+-| 1         | Hardening front-end      | ⏳      |
++| 1         | Hardening front-end      | ✅      |
+ | 2         | First vertical slice     | ✅      |
+-| 3         | Completing the language  | ⏳      |
++| 3         | Completing the language  | 🚧      |
+ | 4         | Function set v1          | ⏳      |
+ | 5         | ASP.NET Core integration | ⏳      |
+ | 6         | Providers                | ⏳      |
+diff --git a/SemanticAnalyzer.cs b/SemanticAnalyzer.cs
+index 0a2bf93..3502e30 100644
+--- a/SemanticAnalyzer.cs
++++ b/SemanticAnalyzer.cs
+@@ -53,6 +53,9 @@ public static class SemanticAnalyzer
+             NotExpression negation =>
+                 AnalyzeNot(negation, context),
+ 
++            VariableExpression variable =>
++                AnalyzeVariable(variable, context),
++
+             CallExpression call =>
+                 AnalyzeCall(call, context),
+ 
+@@ -465,8 +468,15 @@ public static class SemanticAnalyzer
+                 $"Unknown function '{functionName}'.",
+                 expression.Function);
+ 
++        // $let bukan function data biasa: ia tidak mengubah data (pass-through target),
++        // dan tidak tunduk pada TargetRule/parameter generik, karena argumen pertamanya
++        // adalah deklarasi (nama variable), bukan nilai yang dievaluasi. Dicocokkan lewat nama
++        // (bukan identitas objek), sehingga tetap berfungsi bila $let didaftarkan oleh ekstensi lain.
++        if (functionName == "$let")
++            return AnalyzeLet(expression, context);
++
+         // 3. Validasi target sebelum argumen, karena scope argumen bergantung pada tipe target
+-        ValidateTarget(expression, function);
++        ValidateTarget(expression, function, context);
+ 
+         var targetType = expression.Target?.SemanticType;
+ 
+@@ -506,6 +516,66 @@ public static class SemanticAnalyzer
+         return expression;
+     }
+ 
++    /// <summary>
++    /// $let(@nama, nilai): mengikat @nama ke tipe hasil `nilai` untuk step berikutnya dalam chain,
++    /// tanpa mengubah data (pass-through dari target). Lihat docs/Variables.md.
++    /// </summary>
++    private static CallExpression AnalyzeLet(CallExpression expression, SemanticContext context)
++    {
++        if (expression.Arguments.Count != 2)
++            throw new QueryException(
++                QueryErrorCode.InvalidArgumentCount,
++                "Function '$let' requires exactly 2 arguments: $let(@name, value).",
++                expression.Function);
++
++        if (expression.Arguments[0] is not VariableExpression variable)
++            throw new QueryException(
++                QueryErrorCode.InvalidLetTarget,
++                "The first argument of '$let' must be a variable, e.g. $let(@name, value).",
++                expression.Arguments[0].Span);
++
++        // Nilai dianalisis dalam scope saat ini (mis. di dalam $filter bila $let dipakai di situ).
++        // Snapshot lalu restore supaya $let bersarang di dalam nilai ini tidak bocor keluar;
++        // hanya binding milik $let ini sendiri yang berlaku untuk step berikutnya.
++        var snapshot = context.SnapshotVariables();
++
++        Analyze(expression.Arguments[1], context);
++
++        context.RestoreVariables(snapshot);
++
++        var valueType =
++            expression.Arguments[1].SemanticType
++            ?? throw new QueryException(
++                QueryErrorCode.InternalError,
++                "Value of '$let' has no semantic type.");
++
++        var name = context.GetVariableName(variable);
++
++        context.BindVariable(name, valueType, variable.Token);
++
++        // Transparan terhadap data: hasil $let sama dengan targetnya (atau Unknown bila
++        // $let berada di awal chain), sehingga function berikutnya melihat seolah $let
++        // tidak ada dalam alur data.
++        expression.SemanticType = expression.Target?.SemanticType ?? SemanticTypeOptions.Unknown;
++
++        return expression;
++    }
++
++    private static VariableExpression AnalyzeVariable(
++        VariableExpression expression,
++        SemanticContext context)
++    {
++        var name = context.GetVariableName(expression);
++
++        expression.SemanticType = context.ResolveVariable(name)
++            ?? throw new QueryException(
++                QueryErrorCode.UndefinedVariable,
++                $"Variable '@{name}' is not defined.",
++                expression.Token);
++
++        return expression;
++    }
++
+     private static void ValidateArguments(CallExpression expression, FunctionDefinition function)
+     {
+         if (expression.Arguments.Count < function.MinArguments)
+@@ -540,7 +610,10 @@ public static class SemanticAnalyzer
+         }
+     }
+ 
+-    private static void ValidateTarget(CallExpression expression, FunctionDefinition function)
++    private static void ValidateTarget(
++        CallExpression expression,
++        FunctionDefinition function,
++        SemanticContext context)
+     {
+         if (expression.Target is null)
+         {
+@@ -553,10 +626,18 @@ public static class SemanticAnalyzer
+         }
+ 
+         if (function.TargetRule == TargetRule.Forbidden)
+-            throw new QueryException(
+-                QueryErrorCode.InvalidTarget,
+-                $"Function '{function.Name}' must start the chain and cannot be called on a target.",
+-                expression.Function);
++        {
++            // $let tidak menghitung sebagai target nyata: ia transparan terhadap data,
++            // jadi "$let(...).$source(...)" tetap sah selama tidak ada data sungguhan
++            // (call selain $let) di depannya.
++            if (HasRealTarget(expression.Target, context))
++                throw new QueryException(
++                    QueryErrorCode.InvalidTarget,
++                    $"Function '{function.Name}' must start the chain and cannot be called on a target.",
++                    expression.Function);
++
++            return;
++        }
+ 
+         var targetType = expression.Target.SemanticType
+             ?? throw new QueryException(
+@@ -570,6 +651,20 @@ public static class SemanticAnalyzer
+                 expression.Function);
+     }
+ 
++    /// <summary>True bila ada call selain $let di sepanjang rantai target.</summary>
++    private static bool HasRealTarget(BaseExpression? target, SemanticContext context)
++    {
++        while (target is CallExpression call)
++        {
++            if (context.GetFunctionName(call.Function) != "$let")
++                return true;
++
++            target = call.Target;
++        }
++
++        return false;
++    }
++
+     private static SemanticType GetValueType(
+         ValueExpression expression,
+         SemanticContext context)
+diff --git a/SemanticContext.cs b/SemanticContext.cs
+index 8daae84..0704e53 100644
+--- a/SemanticContext.cs
++++ b/SemanticContext.cs
+@@ -7,10 +7,12 @@ public sealed class SemanticContext
+ {
+     private readonly ReadOnlyMemory<char> _source;
+ 
+-    private readonly IReadOnlyDictionary<string, SemanticType> _identifiers;
+-
+     private readonly FunctionRegistry _functions;
+ 
++    // Variable (@nama): dictionary datar, bertambah lewat $let. Tidak ada mekanisme
++    // identifier global lagi; field hanya ada di scope elemen (lihat ResolveIdentifier).
++    private Dictionary<string, SemanticType> _variables;
++
+     // Stack scope untuk identifier lokal (mis. field elemen di dalam $filter).
+     // Enumerasi Stack<T> dimulai dari elemen paling atas (scope terdalam).
+     private readonly Stack<IReadOnlyDictionary<string, SemanticType>> _scopes = new();
+@@ -20,14 +22,16 @@ public sealed class SemanticContext
+ 
+     public SemanticContext(
+         ReadOnlyMemory<char> source,
+-        IReadOnlyDictionary<string, SemanticType> identifiers,
+         FunctionRegistry functions,
+-        QueryLimits? limits = null)
++        QueryLimits? limits = null,
++        IReadOnlyDictionary<string, SemanticType>? variables = null)
+     {
+         _source = source;
+-        _identifiers = identifiers;
+         _functions = functions.Freeze();
+         _maxDepth = (limits ?? QueryLimits.Default).MaxDepth;
++        _variables = variables is null
++            ? new Dictionary<string, SemanticType>(StringComparer.Ordinal)
++            : new Dictionary<string, SemanticType>(variables, StringComparer.Ordinal);
+     }
+ 
+     // ------------------------------------------------------------------
+@@ -64,6 +68,42 @@ public sealed class SemanticContext
+             ? StringLiteral.Unquote(_source.Span[expression.Name.StartPosition..expression.Name.EndPosition])
+             : GetText(expression.Name);
+ 
++    /// <summary>Nama sebuah variable tanpa prefix '@'.</summary>
++    public string GetVariableName(VariableExpression expression) =>
++        GetText(expression.Token)[1..];
++
++    // ------------------------------------------------------------------
++    // Variable (@nama)
++    // ------------------------------------------------------------------
++
++    public SemanticType? ResolveVariable(string name) =>
++        _variables.TryGetValue(name, out var type) ? type : null;
++
++    /// <summary>
++    /// Mengikat variable baru. declarationToken dipakai untuk posisi error bila nama
++    /// sudah terikat sebelumnya (dari $let lain atau dari luar query).
++    /// </summary>
++    public void BindVariable(string name, SemanticType type, Token declarationToken)
++    {
++        if (_variables.ContainsKey(name))
++            throw new QueryException(
++                QueryErrorCode.VariableRedefined,
++                $"Variable '@{name}' is already defined.",
++                declarationToken);
++
++        _variables[name] = type;
++    }
++
++    /// <summary>
++    /// Snapshot variable saat ini. Dipakai $let untuk membuang binding yang dibuat oleh
++    /// $let lain di dalam ekspresi nilainya sendiri, supaya scope tetap lexical ke depan.
++    /// </summary>
++    public IReadOnlyDictionary<string, SemanticType> SnapshotVariables() =>
++        new Dictionary<string, SemanticType>(_variables, StringComparer.Ordinal);
++
++    public void RestoreVariables(IReadOnlyDictionary<string, SemanticType> snapshot) =>
++        _variables = new Dictionary<string, SemanticType>(snapshot, StringComparer.Ordinal);
++
+     // ------------------------------------------------------------------
+     // Scope
+     // ------------------------------------------------------------------
+@@ -107,18 +147,19 @@ public sealed class SemanticContext
+     // Resolve
+     // ------------------------------------------------------------------
+ 
++    /// <summary>
++    /// Field dari item saat ini. Hanya ada di scope elemen (mis. di dalam $filter),
++    /// tidak ada lagi mekanisme identifier global.
++    /// </summary>
+     public SemanticType? ResolveIdentifier(string name)
+     {
+-        // Scope terdalam dulu, baru identifier global.
+         foreach (var scope in _scopes)
+         {
+             if (scope.TryGetValue(name, out var scoped))
+                 return scoped;
+         }
+ 
+-        return _identifiers.TryGetValue(name, out var type)
+-            ? type
+-            : null;
++        return null;
+     }
+ 
+     public FunctionDefinition? ResolveFunction(string name) =>
+diff --git a/TokenType.cs b/TokenType.cs
+index 9ce71d0..cbba687 100644
+--- a/TokenType.cs
++++ b/TokenType.cs
+@@ -19,5 +19,6 @@ public enum TokenType
+     Number,
+     BooleanLiteral,
+     NullLiteral,
+-    NotOperator
++    NotOperator,
++    Variable
+ }
+\ No newline at end of file
+diff --git a/docs/Variables.md b/docs/Variables.md
+new file mode 100644
+index 0000000..f0abb52
+--- /dev/null
++++ b/docs/Variables.md
+@@ -0,0 +1,140 @@
++# FunQuery Variables
++
++This document specifies `@` variables and `$let`: how they are declared, how they scope, and how they
++interact with the rest of the chain. Types are defined in [`DataTypes.md`](DataTypes.md); the general rule
++that every expression must live inside a function call is defined in the language grammar and is assumed
++here.
++
++## Syntax
++
++```
++$let(@name, value)
++```
++
++* `@name` is a variable reference. The `@` is part of the token; `name` follows identifier rules (ASCII
++  letters, digits, `_`, not starting with a digit).
++* `$let` takes exactly two arguments. The first **must** be a bare `@name` — a declaration, not a reference.
++  Anything else (`$let(1, 2)`, `$let('x', 2)`, `$let(id, 2)`) is `INVALID_LET_TARGET`.
++* `value` is evaluated once, in the environment at that point in the chain (see [Evaluation](#evaluation)).
++* `$let` does not filter, project, or otherwise change the data flowing through the chain. It passes its
++  target through unchanged and makes `@name` available to every step that follows it.
++
++```
++$let(@min, 18)
++    .$source([{age: 17}, {age: 18}, {age: 25}])
++    .$filter(age gte @min)
++```
++
++## `$let` is transparent to the chain
++
++`$let` may appear **anywhere** in a chain — before the data source, after it, or between other steps — and
++in any number:
++
++```
++$let(@a, 1).$let(@b, 2).$source(...).$filter(...)
++$source(...).$let(@x, 1).$filter(...)
++```
++
++For the purpose of target-rule checks (a function that must, may, or must not be called on a target — see
++`FunctionDefinition.TargetRule`), a chain of `$let` calls does not count as "having a target": it is
++skipped over when deciding whether a function is being called on real data.
++
++* `$let(@x, 1).$source(...)` is valid: `$source` requires no target, and the only thing preceding it is
++  `$let`, which does not count.
++* `$source(...).$let(@x, 1).$source(...)` is still rejected (`INVALID_TARGET`): `$source` still cannot
++  follow real data, even through a `$let`.
++* `$let(@x, 1).$filter(...)` fails, because after skipping `$let` there is no array for `$filter` to work
++  on — this is a genuine error, not a `$let` limitation.
++
++Providers and future functions with `TargetRule.Forbidden` (functions that must start a chain, like
++`$source`) must apply the same rule: a leading `$let` chain does not count as a target, but a `$let` chain
++must still be evaluated for its side effect (the binding) even though its value is discarded. The in-memory
++provider does this in `CoreInMemoryFunctions.Source`; any future `Forbidden`-target function's
++implementation must do the same.
++
++## Scope
++
++A variable is visible to every step **after** the `$let` that declares it, for the rest of that chain.
++There is no way to "unset" a variable, and scope only ever grows forward.
++
++### Nested `$let` inside a value does not leak
++
++The `value` argument of `$let` is itself an ordinary expression and may contain further `$let` calls (for
++example when it is a sub-query: `$let(@x, $let(@y, 1).$source(...))`). Any variable bound while evaluating
++that value is discarded once the value has been computed — it is not visible after the outer `$let`:
++
++```
++$let(@x, $let(@y, 1).$source([{n: @y}]))
++    .$source(@x)
++    .$filter(n eq @y)   -- UNDEFINED_VARIABLE: @y only existed while computing @x's value
++```
++
++This also means a variable declared inside a nested value can reuse a name already used outside it, without
++conflict, because the two scopes never overlap:
++
++```
++$let(@x, $let(@x, 1).$source([{n: @x}]))   -- fine: the inner @x is discarded before the outer @x is bound
++    .$source([{m: 1}])
++```
++
++### Redefinition
++
++Declaring the same name twice in the same visible scope is an error, regardless of the values:
++
++```
++$let(@x, 1).$let(@x, 2)...   -- VARIABLE_REDEFINED, pointing at the second @x
++```
++
++## Evaluation
++
++* `value` is evaluated **once**, not once per row. `$let(@min, 18)` computes `18` a single time, no matter
++  how many rows the query later produces.
++* `value` may be a full sub-chain, for example `$let(@x, $source(...).$filter(...))`. It is evaluated with
++  no "current row" — it cannot use `$let`'s own outer context's element scope, only fields and variables
++  that are otherwise in scope at that point (for instance, if `$let` sits inside `$filter`'s predicate, the
++  value can see that predicate's element fields).
++* The resulting value is **materialized**: a computed value, not a query that gets re-run. This matches the
++  language's general rule that a variable holds a value, never a function.
++* A provider is free to implement this differently (for example, translating a `$let` value into a SQL CTE
++  or a query parameter) as long as the value behaves as if computed once up front.
++
++## `$source(@variable)`
++
++A variable bound to an array can be used as `$source`'s argument, exactly like an inline array literal:
++
++```
++$let(@items, [{id: 1}, {id: 2}])
++    .$source(@items)
++    .$filter(id eq 2)
++```
++
++* The variable must resolve to an `array` type. Anything else is `TYPE_MISMATCH` (`Argument 1 of '$source'
++  expects array, got string.`), the same error `$source` would give for any other wrong-typed argument.
++* An undefined variable is `UNDEFINED_VARIABLE`, not `TYPE_MISMATCH` — the two are reported separately so
++  that "the variable doesn't exist" and "the variable is the wrong type" are never confused.
++* Variables from outside the query text (bound by the HTTP layer from query parameters, `&@min=18`) are out
++  of scope for this document — see [Milestone 5](Milestones.md#milestone-5--aspnet-core-integration). This
++  document covers only variables declared with `$let` inside the query itself. `QueryEngine` may grow an
++  overload to accept externally supplied variables once that milestone defines how their literal text is
++  parsed and validated.
++
++## Error reference
++
++| Situation | Code |
++| --- | --- |
++| First argument of `$let` is not a bare `@name` | `INVALID_LET_TARGET` |
++| `$let` called with a number of arguments other than 2 | `INVALID_ARGUMENT_COUNT` |
++| `@name` referenced but never bound in the visible scope | `UNDEFINED_VARIABLE` |
++| `@name` declared twice in the same visible scope | `VARIABLE_REDEFINED` |
++| `$source(@name)` where `@name` is not an array | `TYPE_MISMATCH` |
++| A function with `TargetRule.Forbidden` is called after real data, even through `$let` | `INVALID_TARGET` |
++
++## What is deliberately out of scope for this version
++
++* **Reading a variable's value back out of a row.** Without `$select` (Milestone 4), there is no way to
++  project `@x` into the output on its own; it can only be used inside a predicate (`$filter`) or as
++  `$source`'s argument.
++* **`~` (the current element) and field paths (`a.b`)**, which are specified together with `$field` in a
++  later part of Milestone 3.
++* **Binding variables from HTTP query parameters.** That is Milestone 5's responsibility; this document
++  only covers `@` and `$let` as they appear inside the query text.
+diff --git a/tests/FunQuery.Tests/AdversarialInputTests.cs b/tests/FunQuery.Tests/AdversarialInputTests.cs
+index 9aeb5d1..5a129ad 100644
+--- a/tests/FunQuery.Tests/AdversarialInputTests.cs
++++ b/tests/FunQuery.Tests/AdversarialInputTests.cs
+@@ -93,7 +93,7 @@ public class AdversarialInputTests
+     private static readonly string[] Fragments =
+     [
+         "$source", "$filter", "$x", "(", ")", "[", "]", "{", "}", ",", ":", ".", " ",
+-        "id", "name", "eq", "neq", "gt", "and", "or", "1", "2.5", "007", "'x'", "'", "#", "\"", "true", "false", "null", "not", "in", "contains", "startswith", "endswith", "-1", "-", "''", "-2.5",
++        "id", "name", "eq", "neq", "gt", "and", "or", "1", "2.5", "007", "'x'", "'", "#", "\"", "true", "false", "null", "not", "in", "contains", "startswith", "endswith", "-1", "-", "''", "-2.5", "@x", "@", "$let",
+     ];
+ 
+     private static readonly string[] ValidQueries =
+@@ -104,6 +104,8 @@ public class AdversarialInputTests
+         "$source([{id: 1, name: null}, {id: 2, name: 'x'}]).$filter(name neq null and id lte 2)",
+         "$source([{id: -1, name: 'it''s'}, {id: 2, name: 'x'}]).$filter(not name contains 'z' and id in [-1, 2])",
+         "$source([{'first-name': 'Ana', n: -1.5}]).$filter(n lt 0 or 'A' startswith 'A')",
++        "$let(@min, 18).$source([{age: 17}, {age: 25}]).$filter(age gte @min)",
++        "$let(@a, 1).$let(@b, $source([{n:1}]).$filter(n eq @a)).$source(@b)",
+     ];
+ 
+     private static readonly QueryEngine Engine = new();
+diff --git a/tests/FunQuery.Tests/SemanticAnalyzerTests.cs b/tests/FunQuery.Tests/SemanticAnalyzerTests.cs
+index b856497..d751e1a 100644
+--- a/tests/FunQuery.Tests/SemanticAnalyzerTests.cs
++++ b/tests/FunQuery.Tests/SemanticAnalyzerTests.cs
+@@ -15,12 +15,11 @@ public class SemanticAnalyzerTests
+     private static void AssertFails(
+         QueryErrorCode expected,
+         string input,
+-        IReadOnlyDictionary<string, SemanticType>? identifiers = null,
+         QueryLimits? limits = null,
+         FunctionRegistry? functions = null) =>
+         QueryAssert.Fails(
+             expected,
+-            () => QueryPipeline.Analyze(input, identifiers, limits, functions));
++            () => QueryPipeline.Analyze(input, limits, functions));
+ 
+     private static SemanticType ElementTypeOf(string literal)
+     {
+@@ -36,13 +35,8 @@ public class SemanticAnalyzerTests
+     [Fact]
+     public void ProgramSample_IsValid()
+     {
+-        var identifiers = QueryPipeline.Identifiers(
+-            ("id", SemanticTypeOptions.Int),
+-            ("name", SemanticTypeOptions.String));
+-
+         var result = QueryPipeline.Analyze(
+-            "$source([{id: 1, name: 'hello'}, {id: 2, name: 'world'}]).$filter(id eq 2.1)",
+-            identifiers);
++            "$source([{id: 1, name: 'hello'}, {id: 2, name: 'world'}]).$filter(id eq 2.1)");
+ 
+         Assert.IsType<ArrayType>(result.SemanticType);
+     }
+@@ -218,56 +212,6 @@ public class SemanticAnalyzerTests
+         AssertFails(QueryErrorCode.InvalidArgumentCount, Filter("id eq 1, id eq 2"));
+     }
+ 
+-    // ------------------------------------------------------------------
+-    // Identifier scopes
+-    // ------------------------------------------------------------------
+-
+-    [Fact]
+-    [Trait("Temporary", "Removed with the global identifier mechanism in M3")]
+-    public void GlobalIdentifiers_AreVisibleInsideFilter()
+-    {
+-        var identifiers = QueryPipeline.Identifiers(("limit", SemanticTypeOptions.Int));
+-
+-        var result = QueryPipeline.Analyze(Filter("id lt limit"), identifiers);
+-
+-        Assert.IsType<ArrayType>(result.SemanticType);
+-    }
+-
+-    [Fact]
+-    [Trait("Temporary", "Removed with the global identifier mechanism in M3")]
+-    public void GlobalIdentifier_IsUnknownUntilItIsRegistered()
+-    {
+-        AssertFails(QueryErrorCode.UnknownIdentifier, Filter("id lt limit"));
+-    }
+-
+-    [Fact]
+-    [Trait("Temporary", "Removed with the global identifier mechanism in M3")]
+-    public void ElementFields_ShadowGlobalIdentifiers()
+-    {
+-        var identifiers = QueryPipeline.Identifiers(
+-            ("id", SemanticTypeOptions.String),
+-            ("limit", SemanticTypeOptions.Int));
+-
+-        // 'id' must resolve to the element field (Int), not to the global (String).
+-        // Otherwise 'id lt limit' would compare String with Int and fail.
+-        var result = QueryPipeline.Analyze(Filter("id lt limit"), identifiers);
+-
+-        Assert.IsType<ArrayType>(result.SemanticType);
+-    }
+-
+-    [Fact]
+-    [Trait("Temporary", "Removed with the global identifier mechanism in M3")]
+-    public void GlobalIdentifier_CanFeedAnObjectField()
+-    {
+-        var identifiers = QueryPipeline.Identifiers(("limit", SemanticTypeOptions.Int));
+-
+-        var result = QueryPipeline.Analyze("$source([{id: limit}])", identifiers);
+-
+-        var array = Assert.IsType<ArrayType>(result.SemanticType);
+-        var element = Assert.IsType<ObjectType>(array.Type);
+-        Assert.Equal(SemanticTypeOptions.Int, element.Fields["id"]);
+-    }
+-
+     // ------------------------------------------------------------------
+     // Functions and targets
+     // ------------------------------------------------------------------
+diff --git a/tests/FunQuery.Tests/Support/QueryPipeline.cs b/tests/FunQuery.Tests/Support/QueryPipeline.cs
+index 0551777..acb4a2c 100644
+--- a/tests/FunQuery.Tests/Support/QueryPipeline.cs
++++ b/tests/FunQuery.Tests/Support/QueryPipeline.cs
+@@ -10,17 +10,10 @@ namespace FunQuery.Tests.Support;
+ /// </summary>
+ internal static class QueryPipeline
+ {
+-    private static readonly IReadOnlyDictionary<string, SemanticType> NoIdentifiers =
+-        new Dictionary<string, SemanticType>();
+-
+     /// <summary>A fresh registry containing only the core functions.</summary>
+     public static FunctionRegistry CoreRegistry() =>
+         new FunctionRegistry().AddExtension(new CoreFunctions());
+ 
+-    public static IReadOnlyDictionary<string, SemanticType> Identifiers(
+-        params (string Name, SemanticType Type)[] items) =>
+-        items.ToDictionary(item => item.Name, item => item.Type);
+-
+     public static Token[] Tokenize(string input, QueryLimits? limits = null)
+     {
+         using var buffer = new TokenBuffer(limits: limits);
+@@ -37,17 +30,17 @@ internal static class QueryPipeline
+ 
+     public static BaseExpression Analyze(
+         string input,
+-        IReadOnlyDictionary<string, SemanticType>? identifiers = null,
+         QueryLimits? limits = null,
+-        FunctionRegistry? functions = null)
++        FunctionRegistry? functions = null,
++        IReadOnlyDictionary<string, SemanticType>? variables = null)
+     {
+         var parsed = Parse(input, limits);
+ 
+         var context = new SemanticContext(
+             input.AsMemory(),
+-            identifiers ?? NoIdentifiers,
+             functions ?? CoreRegistry(),
+-            limits);
++            limits,
++            variables);
+ 
+         return SemanticAnalyzer.Analyze(parsed, context);
+     }
+diff --git a/tests/FunQuery.Tests/VariableAndLetTests.cs b/tests/FunQuery.Tests/VariableAndLetTests.cs
+new file mode 100644
+index 0000000..79fb88e
+--- /dev/null
++++ b/tests/FunQuery.Tests/VariableAndLetTests.cs
+@@ -0,0 +1,359 @@
++using FunQuery.Enums;
++using FunQuery.Expressions;
++using FunQuery.SemanticTypes;
++using FunQuery.Tests.Support;
++
++namespace FunQuery.Tests;
++
++/// <summary>@variables and $let: declaration, scope, and $source(@var).</summary>
++public class VariableAndLetTests
++{
++    private static readonly QueryEngine Engine = new();
++
++    private static string Run(string query) => Engine.Execute(query).ToJson();
++
++    // ------------------------------------------------------------------
++    // Lexer
++    // ------------------------------------------------------------------
++
++    [Theory]
++    [InlineData("@x", 0, 2)]
++    [InlineData("@min", 0, 4)]
++    [InlineData("@_a1", 0, 4)]
++    public void AVariableReference_IsOneToken_IncludingTheAt(string text, int start, int end)
++    {
++        var token = Assert.Single(QueryPipeline.Tokenize(text));
++
++        Assert.Equal(new Token(TokenType.Variable, start, end), token);
++    }
++
++    [Theory]
++    [InlineData("@")]
++    [InlineData("@ x")]
++    [InlineData("@1x")]
++    public void AnAtNotFollowedByAnIdentifierCharacter_IsRejected(string text)
++    {
++        QueryAssert.Fails(
++            QueryErrorCode.UnexpectedCharacter,
++            0,
++            1,
++            () => QueryPipeline.Tokenize(text));
++    }
++
++    [Fact]
++    public void TwoVariablesSeparatedBySpace_AreTwoTokens()
++    {
++        var tokens = QueryPipeline.Tokenize("@a @b");
++
++        Assert.Equal(2, tokens.Length);
++        Assert.All(tokens, t => Assert.Equal(TokenType.Variable, t.Type));
++    }
++
++    // ------------------------------------------------------------------
++    // Parser
++    // ------------------------------------------------------------------
++
++    [Fact]
++    public void AVariable_ParsesAsAVariableExpression()
++    {
++        var call = Assert.IsType<CallExpression>(QueryPipeline.Parse("$filter(@x)"));
++        var variable = Assert.IsType<VariableExpression>(Assert.Single(call.Arguments));
++
++        Assert.Equal(new Token(TokenType.Variable, 8, 10), variable.Token);
++        Assert.Equal(new SourceSpan(8, 10), variable.Span);
++    }
++
++    [Fact]
++    public void AVariable_CanBeAnOperandOfAComparison()
++    {
++        var call = Assert.IsType<CallExpression>(QueryPipeline.Parse("$filter(id eq @x)"));
++        var comparison = Assert.IsType<ComparisonExpression>(Assert.Single(call.Arguments));
++
++        Assert.IsType<VariableExpression>(comparison.Right);
++    }
++
++    [Fact]
++    public void ABareVariable_IsRejectedOutsideAFunction()
++    {
++        QueryAssert.Fails(QueryErrorCode.ExpressionOutsideFunction, () => QueryPipeline.Parse("@x"));
++    }
++
++    // ------------------------------------------------------------------
++    // Analysis: undefined and redefined variables
++    // ------------------------------------------------------------------
++
++    [Fact]
++    public void AnUndefinedVariable_IsRejectedWithItsPosition()
++    {
++        var error = QueryAssert.Fails(
++            QueryErrorCode.UndefinedVariable,
++            32,
++            8,
++            () => QueryPipeline.Analyze("$source([{id:1}]).$filter(id eq @missing)"));
++
++        Assert.Contains("'@missing'", error.Message);
++    }
++
++    [Fact]
++    public void RedefiningAVariable_IsRejectedWithTheSecondDeclarationsPosition()
++    {
++        var error = QueryAssert.Fails(
++            QueryErrorCode.VariableRedefined,
++            17,
++            2,
++            () => QueryPipeline.Analyze("$let(@x, 1).$let(@x, 2).$source([{n:1}])"));
++
++        Assert.Contains("'@x'", error.Message);
++    }
++
++    [Theory]
++    [InlineData("$let(1, 2).$source([{n:1}])", QueryErrorCode.InvalidLetTarget, 5, 1)]
++    [InlineData("$let('x', 2).$source([{n:1}])", QueryErrorCode.InvalidLetTarget, 5, 3)]
++    [InlineData("$let(id, 2).$source([{n:1}])", QueryErrorCode.InvalidLetTarget, 5, 2)]
++    public void TheFirstArgumentOfLet_MustBeAVariable(
++        string query,
++        QueryErrorCode code,
++        int position,
++        int length)
++    {
++        QueryAssert.Fails(code, position, length, () => QueryPipeline.Analyze(query));
++    }
++
++    [Theory]
++    [InlineData("$let(@x).$source([{n:1}])")]
++    [InlineData("$let(@x, 1, 2).$source([{n:1}])")]
++    [InlineData("$let().$source([{n:1}])")]
++    public void LetRequiresExactlyTwoArguments(string query)
++    {
++        QueryAssert.Fails(QueryErrorCode.InvalidArgumentCount, () => QueryPipeline.Analyze(query));
++    }
++
++    [Fact]
++    public void LetIsCaseSensitiveLikeEveryOtherFunction()
++    {
++        QueryAssert.Fails(
++            QueryErrorCode.UnknownFunction,
++            () => QueryPipeline.Analyze("$LET(@x, 1).$source([{n:1}])"));
++    }
++
++    // ------------------------------------------------------------------
++    // $let is transparent to the data chain
++    // ------------------------------------------------------------------
++
++    [Theory]
++    [InlineData("$let(@x, 1).$source([{n:1}]).$filter(n eq @x)")]
++    [InlineData("$source([{n:1}]).$let(@x, 1).$filter(n eq @x)")]
++    [InlineData("$let(@a, 1).$let(@b, 2).$source([{n:1}]).$filter(n eq @a)")]
++    public void LetCanBePlacedAnywhereInTheChain_WithoutBreakingTargetRules(string query)
++    {
++        Assert.NotNull(QueryPipeline.Analyze(query).SemanticType);
++    }
++
++    [Fact]
++    public void SourceStillCannotFollowRealData_EvenThroughALet()
++    {
++        // $let is transparent, but it must not let $source hide behind it to dodge
++        // TargetRule.Forbidden when real data already precedes it.
++        var error = QueryAssert.Fails(
++            QueryErrorCode.InvalidTarget,
++            () => QueryPipeline.Analyze("$source([{n:1}]).$let(@x, 1).$source([{n:2}])"));
++
++        Assert.Contains("must start the chain", error.Message);
++    }
++
++    [Fact]
++    public void LetWithNoDataAnywhereInTheChain_StillFailsWhereDataIsRequired()
++    {
++        var error = QueryAssert.Fails(
++            QueryErrorCode.InvalidTarget,
++            () => QueryPipeline.Analyze("$let(@x, 1).$filter(true)"));
++
++        Assert.Contains("$filter", error.Message);
++    }
++
++    [Fact]
++    public void ALetAtTheVeryEndOfTheChain_IsAValidQuery()
++    {
++        // Unusual, but not an error: $let just passes its target through unchanged.
++        var result = QueryPipeline.Analyze("$source([{n:1}]).$let(@x, 1)");
++
++        Assert.IsType<ArrayType>(result.SemanticType);
++    }
++
++    // ------------------------------------------------------------------
++    // Scoping: nested $let inside a value does not leak
++    // ------------------------------------------------------------------
++
++    [Fact]
++    public void ALetNestedInsideAnotherLetsValue_DoesNotLeakOutward()
++    {
++        var error = QueryAssert.Fails(
++            QueryErrorCode.UndefinedVariable,
++            () => QueryPipeline.Analyze(
++                "$let(@x, $let(@y, 1).$source([{n: @y}])).$source(@x).$filter(n eq @y)"));
++
++        Assert.Contains("'@y'", error.Message);
++    }
++
++    [Fact]
++    public void TheOuterLetsOwnBinding_IsStillVisibleAfterANestedLetInsideItsValue()
++    {
++        // @x is bound to an array of {n:int}, so "n eq @x" compares int with array: a type
++        // mismatch, which proves @x itself WAS resolved (an undefined variable would report
++        // UNDEFINED_VARIABLE instead).
++        var error = QueryAssert.Fails(
++            QueryErrorCode.TypeMismatch,
++            () => QueryPipeline.Analyze(
++                "$let(@x, $let(@y, 1).$source([{n: @y}])).$source(@x).$filter(n eq @x)"));
++
++        Assert.Contains("Cannot compare", error.Message);
++    }
++
++    [Fact]
++    public void RedefiningInsideANestedValue_DoesNotConflictWithTheOuterLevel()
++    {
++        // The inner @x (inside the value being bound to the outer @x) is a separate,
++        // already-discarded scope, so this is not a redefinition.
++        var result = QueryPipeline.Analyze(
++            "$let(@x, $let(@x, 1).$source([{n: @x}])).$source([{m:1}]).$filter(m eq 1)");
++
++        Assert.IsType<ArrayType>(result.SemanticType);
++    }
++
++    // ------------------------------------------------------------------
++    // $source(@variable)
++    // ------------------------------------------------------------------
++
++    [Fact]
++    public void SourceAcceptsAVariableBoundToAnArray()
++    {
++        var result = QueryPipeline.Analyze(
++            "$let(@items, [{id: 1}, {id: 2}]).$source(@items).$filter(id eq 2)");
++
++        Assert.IsType<ArrayType>(result.SemanticType);
++    }
++
++    [Theory]
++    [InlineData("$let(@x, 1).$source(@x)", "int")]
++    [InlineData("$let(@x, 'a').$source(@x)", "string")]
++    [InlineData("$let(@x, true).$source(@x)", "bool")]
++    [InlineData("$let(@x, {a: 1}).$source(@x)", "object")]
++    public void SourceRejectsANonArrayVariable(string query, string typeName)
++    {
++        var error = QueryAssert.Fails(QueryErrorCode.TypeMismatch, () => QueryPipeline.Analyze(query));
++
++        Assert.Contains($"got {typeName}", error.Message);
++    }
++
++    [Fact]
++    public void SourceOfAnUndefinedVariable_IsUndefinedVariable_NotTypeMismatch()
++    {
++        QueryAssert.Fails(QueryErrorCode.UndefinedVariable, () => QueryPipeline.Analyze("$source(@x)"));
++    }
++
++    // ------------------------------------------------------------------
++    // Execution: values, order, and every literal kind
++    // ------------------------------------------------------------------
++
++    [Fact]
++    public void ProgramSample_WorksEndToEnd()
++    {
++        Assert.Equal(
++            """[{"age":18},{"age":25}]""",
++            Run("$let(@min, 18)" +
++                ".$source([{age: 17}, {age: 18}, {age: 25}])" +
++                ".$filter(age gte @min)"));
++    }
++
++    [Fact]
++    public void SourceOfAVariable_ReturnsExactlyThatArray()
++    {
++        Assert.Equal(
++            """[{"id":1},{"id":2}]""",
++            Run("$let(@items, [{id: 1}, {id: 2}]).$source(@items)"));
++    }
++
++    // $select does not exist yet, so a bound value cannot be read back directly. Instead,
++    // each case proves the value round-tripped correctly by comparing it with the same
++    // literal parsed independently: if @x really holds that value, "@x eq <literal>" is true.
++    [Theory]
++    [InlineData("1")]
++    [InlineData("-1.5")]
++    [InlineData("'a'")]
++    [InlineData("''")]
++    [InlineData("true")]
++    [InlineData("false")]
++    [InlineData("null")]
++    public void AVariableCanBeBoundToAnyKindOfLiteral(string literal)
++    {
++        Assert.Equal(
++            """[{"n":1}]""",
++            Run($"$let(@x, {literal}).$source([{{n: 1}}]).$filter(@x eq {literal})"));
++    }
++
++    [Fact]
++    public void AVariableCanBeBoundToAnArray()
++    {
++        // eq/neq reject arrays (docs/Operators.md), so this is verified through $source(@var)
++        // instead, which is also its main intended use.
++        Assert.Equal(
++            """[{"id":1},{"id":2}]""",
++            Run("$let(@x, [{id: 1}, {id: 2}]).$source(@x)"));
++    }
++
++    [Fact]
++    public void AVariableCanBeBoundToAnObject_ThoughItCannotBeReadBackWithoutSelect()
++    {
++        // Binding an object is legal even though there is no $select yet to project it back out.
++        // This is a smoke test that it analyzes and executes without error.
++        var result = Engine.Execute("$let(@x, {n: 5}).$source([1])");
++
++        Assert.Equal("array", result.Type.Name);
++        Assert.Equal("[1]", result.ToJson());
++    }
++
++    [Fact]
++    public void MultipleLetsBindIndependentVariables()
++    {
++        Assert.Equal(
++            """[{"n":2}]""",
++            Run("$let(@a, 1).$let(@b, 2)" +
++                ".$source([{n:1}, {n:2}, {n:3}])" +
++                ".$filter(n gt @a and n lt 3 or n eq @b)"));
++    }
++
++    [Fact]
++    public void ALetsValueCanItselfBeAFullSubQuery()
++    {
++        Assert.Equal(
++            """[{"n":1}]""",
++            Run("$let(@x, $source([{n:1}, {n:2}]).$filter(n eq 1)).$source(@x)"));
++    }
++
++    [Fact]
++    public void ALetsValueIsEvaluatedOnceRegardlessOfHowManyRowsFollow()
++    {
++        // If the value were re-evaluated per row, this would still give the same result,
++        // so this test only proves correctness, not the "evaluated once" cost claim, which
++        // is documented in docs/Variables.md instead.
++        Assert.Equal(
++            """[{"n":1},{"n":2},{"n":3}]""",
++            Run("$let(@min, 1).$source([{n:1}, {n:2}, {n:3}]).$filter(n gte @min)"));
++    }
++
++    [Fact]
++    public void NegativeAndDecimalValuesRoundTripThroughAVariable()
++    {
++        Assert.Equal(
++            """[{"n":-1.50}]""",
++            Run("$let(@x, -1.50).$source([{n: -1.50}, {n: 1.0}]).$filter(n eq @x)"));
++    }
++
++    [Fact]
++    public void ANullBoundVariable_ComparesLikeAnyOtherNull()
++    {
++        Assert.Equal(
++            """[{"n":null}]""",
++            Run("$let(@x, null).$source([{n: 1}, {n: null}]).$filter(n eq @x)"));
++    }
++}

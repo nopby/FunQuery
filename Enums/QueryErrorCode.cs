@@ -28,6 +28,11 @@ public enum QueryErrorCode
     NumberOutOfRange,
     NotSupported,
 
+    // Variable dan $let
+    UndefinedVariable,
+    VariableRedefined,
+    InvalidLetTarget,
+
     // Batas keamanan (dipakai saat batas-batas itu diimplementasikan)
     InputTooLong,
     MaxDepthExceeded,

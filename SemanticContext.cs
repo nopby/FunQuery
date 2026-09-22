@@ -7,9 +7,11 @@ public sealed class SemanticContext
 {
     private readonly ReadOnlyMemory<char> _source;
 
-    private readonly IReadOnlyDictionary<string, SemanticType> _identifiers;
-
     private readonly FunctionRegistry _functions;
+
+    // Variable (@nama): dictionary datar, bertambah lewat $let. Tidak ada mekanisme
+    // identifier global lagi; field hanya ada di scope elemen (lihat ResolveIdentifier).
+    private Dictionary<string, SemanticType> _variables;
 
     // Stack scope untuk identifier lokal (mis. field elemen di dalam $filter).
     // Enumerasi Stack<T> dimulai dari elemen paling atas (scope terdalam).
@@ -20,14 +22,16 @@ public sealed class SemanticContext
 
     public SemanticContext(
         ReadOnlyMemory<char> source,
-        IReadOnlyDictionary<string, SemanticType> identifiers,
         FunctionRegistry functions,
-        QueryLimits? limits = null)
+        QueryLimits? limits = null,
+        IReadOnlyDictionary<string, SemanticType>? variables = null)
     {
         _source = source;
-        _identifiers = identifiers;
         _functions = functions.Freeze();
         _maxDepth = (limits ?? QueryLimits.Default).MaxDepth;
+        _variables = variables is null
+            ? new Dictionary<string, SemanticType>(StringComparer.Ordinal)
+            : new Dictionary<string, SemanticType>(variables, StringComparer.Ordinal);
     }
 
     // ------------------------------------------------------------------
@@ -63,6 +67,42 @@ public sealed class SemanticContext
         expression.Name.Type == TokenType.StringLiteral
             ? StringLiteral.Unquote(_source.Span[expression.Name.StartPosition..expression.Name.EndPosition])
             : GetText(expression.Name);
+
+    /// <summary>Nama sebuah variable tanpa prefix '@'.</summary>
+    public string GetVariableName(VariableExpression expression) =>
+        GetText(expression.Token)[1..];
+
+    // ------------------------------------------------------------------
+    // Variable (@nama)
+    // ------------------------------------------------------------------
+
+    public SemanticType? ResolveVariable(string name) =>
+        _variables.TryGetValue(name, out var type) ? type : null;
+
+    /// <summary>
+    /// Mengikat variable baru. declarationToken dipakai untuk posisi error bila nama
+    /// sudah terikat sebelumnya (dari $let lain atau dari luar query).
+    /// </summary>
+    public void BindVariable(string name, SemanticType type, Token declarationToken)
+    {
+        if (_variables.ContainsKey(name))
+            throw new QueryException(
+                QueryErrorCode.VariableRedefined,
+                $"Variable '@{name}' is already defined.",
+                declarationToken);
+
+        _variables[name] = type;
+    }
+
+    /// <summary>
+    /// Snapshot variable saat ini. Dipakai $let untuk membuang binding yang dibuat oleh
+    /// $let lain di dalam ekspresi nilainya sendiri, supaya scope tetap lexical ke depan.
+    /// </summary>
+    public IReadOnlyDictionary<string, SemanticType> SnapshotVariables() =>
+        new Dictionary<string, SemanticType>(_variables, StringComparer.Ordinal);
+
+    public void RestoreVariables(IReadOnlyDictionary<string, SemanticType> snapshot) =>
+        _variables = new Dictionary<string, SemanticType>(snapshot, StringComparer.Ordinal);
 
     // ------------------------------------------------------------------
     // Scope
@@ -107,18 +147,19 @@ public sealed class SemanticContext
     // Resolve
     // ------------------------------------------------------------------
 
+    /// <summary>
+    /// Field dari item saat ini. Hanya ada di scope elemen (mis. di dalam $filter),
+    /// tidak ada lagi mekanisme identifier global.
+    /// </summary>
     public SemanticType? ResolveIdentifier(string name)
     {
-        // Scope terdalam dulu, baru identifier global.
         foreach (var scope in _scopes)
         {
             if (scope.TryGetValue(name, out var scoped))
                 return scoped;
         }
 
-        return _identifiers.TryGetValue(name, out var type)
-            ? type
-            : null;
+        return null;
     }
 
     public FunctionDefinition? ResolveFunction(string name) =>

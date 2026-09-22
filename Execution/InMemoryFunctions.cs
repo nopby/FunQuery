@@ -43,5 +43,6 @@ public sealed class InMemoryFunctions
     public static InMemoryFunctions CreateDefault() =>
         new InMemoryFunctions()
             .Add("$source", CoreInMemoryFunctions.Source)
+            .Add("$let", CoreInMemoryFunctions.Let)
             .Add("$filter", CoreInMemoryFunctions.Filter);
 }

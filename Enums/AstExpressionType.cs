@@ -13,5 +13,6 @@ public enum AstExpressionType
     Block,
     Named,
     Call,
-    Not
+    Not,
+    Variable
 }

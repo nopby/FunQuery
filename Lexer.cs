@@ -45,6 +45,31 @@ class Lexer
                 continue;
             }
 
+            if (c == '@')
+            {
+                int startPosition = position++;
+
+                // '@' harus langsung diikuti setidaknya satu karakter identifier: '@' saja
+                // atau '@1x' tidak valid.
+                if (position >= text.Length || !IsIdentifierStart(text[position]))
+                {
+                    throw new QueryException(
+                        QueryErrorCode.UnexpectedCharacter,
+                        $"Unexpected character '{c}'.",
+                        startPosition, 1);
+                }
+
+                while (position < text.Length && IsIdentifierPart(text[position]))
+                    position++;
+
+                tokenBuffer.Add(new Token(
+                    TokenType.Variable,
+                    startPosition,
+                    position));
+
+                continue;
+            }
+
             if (IsIdentifierStart(c))
             {
                 int startPosition = position++;

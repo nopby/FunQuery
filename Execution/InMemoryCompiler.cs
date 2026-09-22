@@ -22,11 +22,45 @@ public sealed class InMemoryCompiler
     private readonly ReadOnlyMemory<char> _source;
     private readonly InMemoryFunctions _functions;
 
-    internal InMemoryCompiler(ReadOnlyMemory<char> source, InMemoryFunctions functions)
+    // Nilai variable saat kompilasi. Dictionary datar, sama seperti tipe variable di analyzer;
+    // bertambah lewat $let, dan snapshot/restore menjaga scope tetap lexical ke depan.
+    private Dictionary<string, object?> _variables;
+
+    internal InMemoryCompiler(
+        ReadOnlyMemory<char> source,
+        InMemoryFunctions functions,
+        IReadOnlyDictionary<string, object?>? variables = null)
     {
         _source = source;
         _functions = functions;
+        _variables = variables is null
+            ? new Dictionary<string, object?>(StringComparer.Ordinal)
+            : new Dictionary<string, object?>(variables, StringComparer.Ordinal);
     }
+
+    // ------------------------------------------------------------------
+    // Variable (@nama)
+    // ------------------------------------------------------------------
+
+    internal string GetVariableName(VariableExpression expression) =>
+        TextOf(expression.Token)[1..];
+
+    internal object? ResolveVariable(string name) =>
+        _variables.TryGetValue(name, out var value)
+            ? value
+            // Seharusnya tidak pernah terjadi: analyzer sudah menolak variable yang tidak
+            // terdefinisi (UNDEFINED_VARIABLE) sebelum kompilasi dimulai.
+            : throw new QueryException(
+                QueryErrorCode.InternalError,
+                $"Variable '@{name}' has no runtime value. Was the query analyzed?");
+
+    internal void BindVariable(string name, object? value) => _variables[name] = value;
+
+    internal IReadOnlyDictionary<string, object?> SnapshotVariables() =>
+        new Dictionary<string, object?>(_variables, StringComparer.Ordinal);
+
+    internal void RestoreVariables(IReadOnlyDictionary<string, object?> snapshot) =>
+        _variables = new Dictionary<string, object?>(snapshot, StringComparer.Ordinal);
 
     /// <summary>
     /// Mengkompilasi sebuah ekspresi menjadi delegate yang menerima elemen saat ini
@@ -37,6 +71,7 @@ public sealed class InMemoryCompiler
         {
             ValueExpression value => CompileValue(value),
             IdentifierExpression identifier => CompileField(identifier),
+            VariableExpression variable => CompileVariable(variable),
             ArrayExpression array => CompileArray(array),
             BlockExpression block => CompileObject(block),
             ComparisonExpression comparison => CompileComparison(comparison),
@@ -101,6 +136,16 @@ public sealed class InMemoryCompiler
                 "Number literal has no numeric semantic type. Was the query analyzed?",
                 expression.Span),
         };
+    }
+
+    // Variable dibaca dari _variables saat delegate dipanggil, bukan saat dikompilasi:
+    // sebuah $filter yang dikompilasi sebelum $let-nya sendiri dieksekusi (belum terjadi
+    // di v1 karena urutan kompilasi mengikuti urutan chain) tetap membaca nilai yang benar.
+    private Func<object?, object?> CompileVariable(VariableExpression expression)
+    {
+        var name = GetVariableName(expression);
+
+        return _ => ResolveVariable(name);
     }
 
     private Func<object?, object?> CompileField(IdentifierExpression expression)

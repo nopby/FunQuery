@@ -19,5 +19,6 @@ public enum TokenType
     Number,
     BooleanLiteral,
     NullLiteral,
-    NotOperator
+    NotOperator,
+    Variable
 }

@@ -28,6 +28,10 @@ public static class QueryErrorCodeExtensions
         QueryErrorCode.NumberOutOfRange => "NUMBER_OUT_OF_RANGE",
         QueryErrorCode.NotSupported => "NOT_SUPPORTED",
 
+        QueryErrorCode.UndefinedVariable => "UNDEFINED_VARIABLE",
+        QueryErrorCode.VariableRedefined => "VARIABLE_REDEFINED",
+        QueryErrorCode.InvalidLetTarget => "INVALID_LET_TARGET",
+
         QueryErrorCode.InputTooLong => "INPUT_TOO_LONG",
         QueryErrorCode.MaxDepthExceeded => "MAX_DEPTH_EXCEEDED",
         QueryErrorCode.TooManyTokens => "TOO_MANY_TOKENS",

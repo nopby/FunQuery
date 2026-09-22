@@ -19,9 +19,6 @@ public readonly record struct QueryResult(SemanticType Type, object? Value)
 /// </summary>
 public sealed class QueryEngine
 {
-    private static readonly IReadOnlyDictionary<string, SemanticType> NoIdentifiers =
-        new Dictionary<string, SemanticType>();
-
     private readonly FunctionRegistry _functions;
     private readonly InMemoryInterpreter _interpreter;
 
@@ -53,7 +50,7 @@ public sealed class QueryEngine
 
         var parsed = Parser.Parse(query, buffer.Span, Limits);
 
-        var context = new SemanticContext(query.AsMemory(), NoIdentifiers, _functions, Limits);
+        var context = new SemanticContext(query.AsMemory(), _functions, Limits);
         var analyzed = SemanticAnalyzer.Analyze(parsed, context);
 
         var value = _interpreter.Execute(analyzed, query.AsMemory());

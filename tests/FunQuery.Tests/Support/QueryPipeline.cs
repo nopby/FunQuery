@@ -10,16 +10,9 @@ namespace FunQuery.Tests.Support;
 /// </summary>
 internal static class QueryPipeline
 {
-    private static readonly IReadOnlyDictionary<string, SemanticType> NoIdentifiers =
-        new Dictionary<string, SemanticType>();
-
     /// <summary>A fresh registry containing only the core functions.</summary>
     public static FunctionRegistry CoreRegistry() =>
         new FunctionRegistry().AddExtension(new CoreFunctions());
-
-    public static IReadOnlyDictionary<string, SemanticType> Identifiers(
-        params (string Name, SemanticType Type)[] items) =>
-        items.ToDictionary(item => item.Name, item => item.Type);
 
     public static Token[] Tokenize(string input, QueryLimits? limits = null)
     {
@@ -37,17 +30,17 @@ internal static class QueryPipeline
 
     public static BaseExpression Analyze(
         string input,
-        IReadOnlyDictionary<string, SemanticType>? identifiers = null,
         QueryLimits? limits = null,
-        FunctionRegistry? functions = null)
+        FunctionRegistry? functions = null,
+        IReadOnlyDictionary<string, SemanticType>? variables = null)
     {
         var parsed = Parse(input, limits);
 
         var context = new SemanticContext(
             input.AsMemory(),
-            identifiers ?? NoIdentifiers,
             functions ?? CoreRegistry(),
-            limits);
+            limits,
+            variables);
 
         return SemanticAnalyzer.Analyze(parsed, context);
     }

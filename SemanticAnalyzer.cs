@@ -53,6 +53,9 @@ public static class SemanticAnalyzer
             NotExpression negation =>
                 AnalyzeNot(negation, context),
 
+            VariableExpression variable =>
+                AnalyzeVariable(variable, context),
+
             CallExpression call =>
                 AnalyzeCall(call, context),
 
@@ -465,8 +468,15 @@ public static class SemanticAnalyzer
                 $"Unknown function '{functionName}'.",
                 expression.Function);
 
+        // $let bukan function data biasa: ia tidak mengubah data (pass-through target),
+        // dan tidak tunduk pada TargetRule/parameter generik, karena argumen pertamanya
+        // adalah deklarasi (nama variable), bukan nilai yang dievaluasi. Dicocokkan lewat nama
+        // (bukan identitas objek), sehingga tetap berfungsi bila $let didaftarkan oleh ekstensi lain.
+        if (functionName == "$let")
+            return AnalyzeLet(expression, context);
+
         // 3. Validasi target sebelum argumen, karena scope argumen bergantung pada tipe target
-        ValidateTarget(expression, function);
+        ValidateTarget(expression, function, context);
 
         var targetType = expression.Target?.SemanticType;
 
@@ -506,6 +516,66 @@ public static class SemanticAnalyzer
         return expression;
     }
 
+    /// <summary>
+    /// $let(@nama, nilai): mengikat @nama ke tipe hasil `nilai` untuk step berikutnya dalam chain,
+    /// tanpa mengubah data (pass-through dari target). Lihat docs/Variables.md.
+    /// </summary>
+    private static CallExpression AnalyzeLet(CallExpression expression, SemanticContext context)
+    {
+        if (expression.Arguments.Count != 2)
+            throw new QueryException(
+                QueryErrorCode.InvalidArgumentCount,
+                "Function '$let' requires exactly 2 arguments: $let(@name, value).",
+                expression.Function);
+
+        if (expression.Arguments[0] is not VariableExpression variable)
+            throw new QueryException(
+                QueryErrorCode.InvalidLetTarget,
+                "The first argument of '$let' must be a variable, e.g. $let(@name, value).",
+                expression.Arguments[0].Span);
+
+        // Nilai dianalisis dalam scope saat ini (mis. di dalam $filter bila $let dipakai di situ).
+        // Snapshot lalu restore supaya $let bersarang di dalam nilai ini tidak bocor keluar;
+        // hanya binding milik $let ini sendiri yang berlaku untuk step berikutnya.
+        var snapshot = context.SnapshotVariables();
+
+        Analyze(expression.Arguments[1], context);
+
+        context.RestoreVariables(snapshot);
+
+        var valueType =
+            expression.Arguments[1].SemanticType
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
+                "Value of '$let' has no semantic type.");
+
+        var name = context.GetVariableName(variable);
+
+        context.BindVariable(name, valueType, variable.Token);
+
+        // Transparan terhadap data: hasil $let sama dengan targetnya (atau Unknown bila
+        // $let berada di awal chain), sehingga function berikutnya melihat seolah $let
+        // tidak ada dalam alur data.
+        expression.SemanticType = expression.Target?.SemanticType ?? SemanticTypeOptions.Unknown;
+
+        return expression;
+    }
+
+    private static VariableExpression AnalyzeVariable(
+        VariableExpression expression,
+        SemanticContext context)
+    {
+        var name = context.GetVariableName(expression);
+
+        expression.SemanticType = context.ResolveVariable(name)
+            ?? throw new QueryException(
+                QueryErrorCode.UndefinedVariable,
+                $"Variable '@{name}' is not defined.",
+                expression.Token);
+
+        return expression;
+    }
+
     private static void ValidateArguments(CallExpression expression, FunctionDefinition function)
     {
         if (expression.Arguments.Count < function.MinArguments)
@@ -540,7 +610,10 @@ public static class SemanticAnalyzer
         }
     }
 
-    private static void ValidateTarget(CallExpression expression, FunctionDefinition function)
+    private static void ValidateTarget(
+        CallExpression expression,
+        FunctionDefinition function,
+        SemanticContext context)
     {
         if (expression.Target is null)
         {
@@ -553,10 +626,18 @@ public static class SemanticAnalyzer
         }
 
         if (function.TargetRule == TargetRule.Forbidden)
-            throw new QueryException(
-                QueryErrorCode.InvalidTarget,
-                $"Function '{function.Name}' must start the chain and cannot be called on a target.",
-                expression.Function);
+        {
+            // $let tidak menghitung sebagai target nyata: ia transparan terhadap data,
+            // jadi "$let(...).$source(...)" tetap sah selama tidak ada data sungguhan
+            // (call selain $let) di depannya.
+            if (HasRealTarget(expression.Target, context))
+                throw new QueryException(
+                    QueryErrorCode.InvalidTarget,
+                    $"Function '{function.Name}' must start the chain and cannot be called on a target.",
+                    expression.Function);
+
+            return;
+        }
 
         var targetType = expression.Target.SemanticType
             ?? throw new QueryException(
@@ -568,6 +649,20 @@ public static class SemanticAnalyzer
                 QueryErrorCode.InvalidTarget,
                 $"Function '{function.Name}' cannot be called on {targetType.Name}.",
                 expression.Function);
+    }
+
+    /// <summary>True bila ada call selain $let di sepanjang rantai target.</summary>
+    private static bool HasRealTarget(BaseExpression? target, SemanticContext context)
+    {
+        while (target is CallExpression call)
+        {
+            if (context.GetFunctionName(call.Function) != "$let")
+                return true;
+
+            target = call.Target;
+        }
+
+        return false;
     }
 
     private static SemanticType GetValueType(

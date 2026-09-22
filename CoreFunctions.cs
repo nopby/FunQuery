@@ -22,6 +22,17 @@ public sealed class CoreFunctions : IQueryExtension
 
         registry.Add(new FunctionDefinition
         {
+            // $let(@nama, nilai): dianalisis dan dieksekusi secara khusus (lihat
+            // SemanticAnalyzer.AnalyzeLet dan CoreInMemoryFunctions.Let). Didaftarkan di sini
+            // hanya supaya "$let" dikenal sebagai nama function (whitelist, pesan
+            // UNKNOWN_FUNCTION yang konsisten), bukan supaya validasi generik berlaku padanya.
+            Name = "$let",
+            Parameters = [],
+            TargetRule = TargetRule.Optional,
+        });
+
+        registry.Add(new FunctionDefinition
+        {
             Name = "$filter",
             Parameters = [ParameterDefinition.Of<BooleanType>("predicate", "bool")],
             TargetRule = TargetRule.Required,

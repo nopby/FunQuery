@@ -220,6 +220,7 @@ public static class Parser
             TokenType.Number => ParseValue(tokens, TokenType.Number, ref position),
             TokenType.BooleanLiteral => ParseValue(tokens, TokenType.BooleanLiteral, ref position),
             TokenType.NullLiteral => ParseValue(tokens, TokenType.NullLiteral, ref position),
+            TokenType.Variable => ParseVariable(tokens, ref position),
             TokenType.OpenRoundParenthesis => ParseGroupedExpression(source, tokens, ref position, ref guard),
             TokenType.Call => ParseFunction(source, tokens, ref position, ref guard),
             TokenType.OpenSquareParenthesis => ParseArray(source, tokens, ref position, ref guard),
@@ -456,6 +457,18 @@ public static class Parser
             TokenType.Identifier);
 
         return new IdentifierExpression(token) { Span = SourceSpan.From(token) };
+    }
+
+    private static VariableExpression ParseVariable(
+        ReadOnlySpan<Token> tokens,
+        ref int position)
+    {
+        var token = Consume(
+            tokens,
+            ref position,
+            TokenType.Variable);
+
+        return new VariableExpression(token) { Span = SourceSpan.From(token) };
     }
     private static BaseExpression ParseLogical(
         BaseExpression left,

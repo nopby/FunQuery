@@ -97,9 +97,9 @@ The roadmap is divided into vertical milestones. Each milestone has a concrete d
 | Milestone | Name                     | Status |
 | --------- | ------------------------ | ------ |
 | 0         | Fondasi                  | ✅     |
-| 1         | Hardening front-end      | ⏳      |
+| 1         | Hardening front-end      | ✅      |
 | 2         | First vertical slice     | ✅      |
-| 3         | Completing the language  | ⏳      |
+| 3         | Completing the language  | 🚧      |
 | 4         | Function set v1          | ⏳      |
 | 5         | ASP.NET Core integration | ⏳      |
 | 6         | Providers                | ⏳      |
