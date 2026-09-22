@@ -33,6 +33,9 @@ public enum QueryErrorCode
     VariableRedefined,
     InvalidLetTarget,
 
+    // ~ dan path
+    ItemOutOfContext,
+
     // Batas keamanan (dipakai saat batas-batas itu diimplementasikan)
     InputTooLong,
     MaxDepthExceeded,

@@ -14,5 +14,7 @@ public enum AstExpressionType
     Named,
     Call,
     Not,
-    Variable
+    Variable,
+    Tilde,
+    FieldAccess
 }

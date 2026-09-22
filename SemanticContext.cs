@@ -17,6 +17,12 @@ public sealed class SemanticContext
     // Enumerasi Stack<T> dimulai dari elemen paling atas (scope terdalam).
     private readonly Stack<IReadOnlyDictionary<string, SemanticType>> _scopes = new();
 
+    // Tipe elemen saat ini untuk '~', selalu didorong/dilepas bersama _scopes.
+    private readonly Stack<SemanticType> _elementTypes = new();
+
+    private static readonly IReadOnlyDictionary<string, SemanticType> NoFields =
+        new Dictionary<string, SemanticType>();
+
     private readonly int _maxDepth;
     private int _depth;
 
@@ -72,6 +78,9 @@ public sealed class SemanticContext
     public string GetVariableName(VariableExpression expression) =>
         GetText(expression.Token)[1..];
 
+    public string GetFieldAccessName(FieldAccessExpression expression) =>
+        GetText(expression.Field);
+
     // ------------------------------------------------------------------
     // Variable (@nama)
     // ------------------------------------------------------------------
@@ -108,10 +117,23 @@ public sealed class SemanticContext
     // Scope
     // ------------------------------------------------------------------
 
-    public void PushScope(IReadOnlyDictionary<string, SemanticType> scope) =>
-        _scopes.Push(scope);
+    /// <summary>
+    /// Masuk ke scope elemen: elementType menjadi tipe '~', dan field-nya (bila elementType
+    /// berupa ObjectType) menjadi identifier polos yang bisa diakses. Elemen skalar (mis. int)
+    /// tidak punya field, tapi '~' tetap bisa dipakai untuk merujuk nilainya langsung.
+    /// Pemakaian: using (context.EnterScope(elementType)) { ... }
+    /// </summary>
+    public IDisposable EnterScope(SemanticType elementType)
+    {
+        var fields = elementType is ObjectType obj ? obj.Fields : NoFields;
 
-    public void PopScope()
+        _elementTypes.Push(elementType);
+        _scopes.Push(fields);
+
+        return new ScopeGuard(this);
+    }
+
+    private void PopScope()
     {
         if (_scopes.Count == 0)
             throw new QueryException(
@@ -119,17 +141,12 @@ public sealed class SemanticContext
                 "Cannot pop scope: no active scope.");
 
         _scopes.Pop();
+        _elementTypes.Pop();
     }
 
-    /// <summary>
-    /// Push scope dan kembalikan IDisposable yang otomatis pop.
-    /// Pemakaian: using (context.EnterScope(fields)) { ... }
-    /// </summary>
-    public IDisposable EnterScope(IReadOnlyDictionary<string, SemanticType> scope)
-    {
-        PushScope(scope);
-        return new ScopeGuard(this);
-    }
+    /// <summary>Tipe '~' pada scope elemen terdalam, atau null bila di luar konteks per-elemen.</summary>
+    public SemanticType? CurrentElementType =>
+        _elementTypes.Count > 0 ? _elementTypes.Peek() : null;
 
     private sealed class ScopeGuard(SemanticContext context) : IDisposable
     {

@@ -152,8 +152,11 @@ SQL uses three-valued logic. A SQL provider must translate to the two-valued beh
   and `{'a': 1, a: 2}` is a duplicate. Field names are case-sensitive.
 * Duplicate names in one object are rejected (`DUPLICATE_FIELD`).
 * In an array of objects, every object must currently have the same set of fields with compatible types.
-  Field order does not matter. Sources with missing fields arrive in Milestone 3.
+  Field order does not matter. Numeric widening and sources with genuinely missing fields (a field present
+  in some rows but absent in others) are still open, tracked as the remaining part of Milestone 3.
 * An object cannot be compared with any operator.
+* A nested object field can be reached with a dotted path (`address.city`), specified in
+  [`FieldAccess.md`](FieldAccess.md), which also specifies `~`, the current element.
 
 ## Internal types
 

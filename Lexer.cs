@@ -185,6 +185,12 @@ class Lexer
                         position,
                         ++position));
                     break;
+                case '~':
+                    tokenBuffer.Add(new Token(
+                        TokenType.Tilde,
+                        position,
+                        ++position));
+                    break;
                 case '[':
                     tokenBuffer.Add(new Token(
                         TokenType.OpenSquareParenthesis,

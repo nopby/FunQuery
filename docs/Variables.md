@@ -134,7 +134,6 @@ $let(@items, [{id: 1}, {id: 2}])
 * **Reading a variable's value back out of a row.** Without `$select` (Milestone 4), there is no way to
   project `@x` into the output on its own; it can only be used inside a predicate (`$filter`) or as
   `$source`'s argument.
-* **`~` (the current element) and field paths (`a.b`)**, which are specified together with `$field` in a
-  later part of Milestone 3.
+* **Field paths (`a.b`) and `~` (the current element)**, specified in [`FieldAccess.md`](FieldAccess.md).
 * **Binding variables from HTTP query parameters.** That is Milestone 5's responsibility; this document
   only covers `@` and `$let` as they appear inside the query text.

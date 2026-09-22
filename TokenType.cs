@@ -20,5 +20,6 @@ public enum TokenType
     BooleanLiteral,
     NullLiteral,
     NotOperator,
-    Variable
+    Variable,
+    Tilde
 }

@@ -43,7 +43,7 @@ public class ErrorPositionTests
     [InlineData("$source([{id:1}]).$nope(1)", QueryErrorCode.UnknownFunction, 18, 5)]
     [InlineData("$filter(id eq 1)", QueryErrorCode.InvalidTarget, 0, 7)]
     [InlineData("$source([{id:1}]).$source([{id:1}])", QueryErrorCode.InvalidTarget, 18, 7)]
-    [InlineData("$source([1,2]).$filter(id eq 2)", QueryErrorCode.InvalidTarget, 15, 7)]
+    [InlineData("$source([1,2]).$filter(id eq 2)", QueryErrorCode.UnknownIdentifier, 23, 2)]
     [InlineData("$source()", QueryErrorCode.InvalidArgumentCount, 0, 7)]
     [InlineData("$source([{id:1}],[{id:2}])", QueryErrorCode.InvalidArgumentCount, 0, 7)]
     [InlineData("$source([{id:1}]).$filter()", QueryErrorCode.InvalidArgumentCount, 18, 7)]

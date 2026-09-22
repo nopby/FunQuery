@@ -244,9 +244,16 @@ public class SemanticAnalyzerTests
     }
 
     [Fact]
-    public void Filter_NeedsAnArrayOfObjects()
+    public void Filter_StillRequiresAnArray_NotAScalarOrObject()
     {
-        AssertFails(QueryErrorCode.InvalidTarget, "$source([1, 2]).$filter(1 eq 1)");
+        AssertFails(QueryErrorCode.InvalidTarget, "$filter(1 eq 1)");
+    }
+
+    [Fact]
+    public void Filter_OnAnArrayOfScalars_HasNoNamedFields_UseTildeInstead()
+    {
+        // "id" is not a field of a scalar element; ~ is used instead (see TildeAndFieldAccessTests).
+        AssertFails(QueryErrorCode.UnknownIdentifier, "$source([1, 2]).$filter(id eq 2)");
     }
 
     // ------------------------------------------------------------------

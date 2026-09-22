@@ -56,6 +56,12 @@ public static class SemanticAnalyzer
             VariableExpression variable =>
                 AnalyzeVariable(variable, context),
 
+            TildeExpression tilde =>
+                AnalyzeTilde(tilde, context),
+
+            FieldAccessExpression access =>
+                AnalyzeFieldAccess(access, context),
+
             CallExpression call =>
                 AnalyzeCall(call, context),
 
@@ -483,15 +489,17 @@ public static class SemanticAnalyzer
         // 4. Analyze argumen (di dalam scope field elemen kalau fungsi membutuhkannya)
         if (function.UsesElementScope)
         {
-            if (targetType is not ArrayType { Type: ObjectType element })
+            if (targetType is not ArrayType array)
             {
                 throw new QueryException(
                     QueryErrorCode.InvalidTarget,
-                    $"Function '{function.Name}' requires an array of objects as target.",
+                    $"Function '{function.Name}' requires an array as target.",
                     expression.Function);
             }
 
-            using (context.EnterScope(element.Fields))
+            // Elemen boleh object (field bisa diakses lewat identifier polos) atau skalar
+            // (hanya bisa diakses lewat '~'). Lihat docs/Variables.md dan docs/DataTypes.md.
+            using (context.EnterScope(array.Type))
             {
                 foreach (var argument in expression.Arguments)
                     Analyze(argument, context);
@@ -557,6 +565,51 @@ public static class SemanticAnalyzer
         // $let berada di awal chain), sehingga function berikutnya melihat seolah $let
         // tidak ada dalam alur data.
         expression.SemanticType = expression.Target?.SemanticType ?? SemanticTypeOptions.Unknown;
+
+        return expression;
+    }
+
+    private static TildeExpression AnalyzeTilde(
+        TildeExpression expression,
+        SemanticContext context)
+    {
+        expression.SemanticType = context.CurrentElementType
+            ?? throw new QueryException(
+                QueryErrorCode.ItemOutOfContext,
+                "'~' can only be used inside a function that evaluates per element, " +
+                "such as $filter.",
+                expression.Span);
+
+        return expression;
+    }
+
+    private static FieldAccessExpression AnalyzeFieldAccess(
+        FieldAccessExpression expression,
+        SemanticContext context)
+    {
+        Analyze(expression.Target, context);
+
+        var targetType =
+            expression.Target.SemanticType
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
+                "Target of field access has no semantic type.");
+
+        var name = context.GetFieldAccessName(expression);
+
+        if (targetType is not ObjectType obj)
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                $"Cannot access field '{name}' on {targetType.Name}.",
+                expression.Target.Span);
+
+        if (!obj.Fields.TryGetValue(name, out var fieldType))
+            throw new QueryException(
+                QueryErrorCode.UnknownIdentifier,
+                $"Unknown field '{name}'.",
+                expression.Field);
+
+        expression.SemanticType = fieldType;
 
         return expression;
     }

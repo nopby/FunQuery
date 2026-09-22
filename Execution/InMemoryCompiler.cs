@@ -72,6 +72,8 @@ public sealed class InMemoryCompiler
             ValueExpression value => CompileValue(value),
             IdentifierExpression identifier => CompileField(identifier),
             VariableExpression variable => CompileVariable(variable),
+            TildeExpression => static element => element,
+            FieldAccessExpression access => CompileFieldAccess(access),
             ArrayExpression array => CompileArray(array),
             BlockExpression block => CompileObject(block),
             ComparisonExpression comparison => CompileComparison(comparison),
@@ -155,6 +157,17 @@ public sealed class InMemoryCompiler
         // Field yang tidak ada dibaca sebagai null.
         return element =>
             element is ObjectValue row && row.TryGetValue(name, out var value)
+                ? value
+                : null;
+    }
+
+    private Func<object?, object?> CompileFieldAccess(FieldAccessExpression expression)
+    {
+        var target = Compile(expression.Target);
+        var name = TextOf(expression.Field);
+
+        return element =>
+            target(element) is ObjectValue row && row.TryGetValue(name, out var value)
                 ? value
                 : null;
     }

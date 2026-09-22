@@ -216,7 +216,10 @@ public static class Parser
         return tokens[position].Type switch
         {
             TokenType.StringLiteral => ParseValue(tokens, TokenType.StringLiteral, ref position),
-            TokenType.Identifier => ParseIdentifier(tokens, ref position),
+            TokenType.Identifier =>
+                ParsePath(ParseIdentifier(tokens, ref position), tokens, ref position),
+            TokenType.Tilde =>
+                ParsePath(ParseTilde(tokens, ref position), tokens, ref position),
             TokenType.Number => ParseValue(tokens, TokenType.Number, ref position),
             TokenType.BooleanLiteral => ParseValue(tokens, TokenType.BooleanLiteral, ref position),
             TokenType.NullLiteral => ParseValue(tokens, TokenType.NullLiteral, ref position),
@@ -469,6 +472,47 @@ public static class Parser
             TokenType.Variable);
 
         return new VariableExpression(token) { Span = SourceSpan.From(token) };
+    }
+
+    private static TildeExpression ParseTilde(
+        ReadOnlySpan<Token> tokens,
+        ref int position)
+    {
+        var token = Consume(
+            tokens,
+            ref position,
+            TokenType.Tilde);
+
+        return new TildeExpression(token) { Span = SourceSpan.From(token) };
+    }
+
+    /// <summary>
+    /// Path bertitik setelah identifier atau '~': a.b.c, ~.a.b. Hanya '.' yang diikuti
+    /// Identifier dikonsumsi di sini; '.' yang diikuti '$' adalah chain function dan
+    /// ditangani oleh ParsePostfix, bukan di sini.
+    /// </summary>
+    private static BaseExpression ParsePath(
+        BaseExpression root,
+        ReadOnlySpan<Token> tokens,
+        ref int position)
+    {
+        var expression = root;
+
+        while (position + 1 < tokens.Length &&
+               tokens[position].Type == TokenType.Dot &&
+               tokens[position + 1].Type == TokenType.Identifier)
+        {
+            position++; // '.'
+
+            var field = Consume(tokens, ref position, TokenType.Identifier);
+
+            expression = new FieldAccessExpression(expression, field)
+            {
+                Span = new SourceSpan(expression.Span.Start, field.EndPosition)
+            };
+        }
+
+        return expression;
     }
     private static BaseExpression ParseLogical(
         BaseExpression left,
