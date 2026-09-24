@@ -93,7 +93,7 @@ public class AdversarialInputTests
     private static readonly string[] Fragments =
     [
         "$source", "$filter", "$x", "(", ")", "[", "]", "{", "}", ",", ":", ".", " ",
-        "id", "name", "eq", "neq", "gt", "and", "or", "1", "2.5", "007", "'x'", "'", "#", "\"", "true", "false", "null", "not", "in", "contains", "startswith", "endswith", "-1", "-", "''", "-2.5", "@x", "@", "$let", "~",
+        "id", "name", "eq", "neq", "gt", "and", "or", "1", "2.5", "007", "'x'", "'", "#", "\"", "true", "false", "null", "not", "in", "contains", "startswith", "endswith", "-1", "-", "''", "-2.5", "@x", "@", "$let", "~", "$field",
     ];
 
     private static readonly string[] ValidQueries =
@@ -108,6 +108,8 @@ public class AdversarialInputTests
         "$let(@a, 1).$let(@b, $source([{n:1}]).$filter(n eq @a)).$source(@b)",
         "$source([1, 2, 3]).$filter(not ~ gt 1 and ~ neq 2)",
         "$source([{a: {b: {c: 1}}}]).$filter(a.b.c eq 1 or ~.a.b.c neq 1)",
+        "$source([{id: 1}, {name: 'x'}]).$filter($field('id') eq 1 or name eq 'x')",
+        "$let(@col, 'a.b').$source([{a: {b: 1}}, {a: {b: 2.5}}]).$filter($field(@col) gt 1)",
     ];
 
     private static readonly QueryEngine Engine = new();

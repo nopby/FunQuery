@@ -84,6 +84,46 @@ field name is expected) or after a plain field reference where a call was expect
 (`$filter(a).$nope()`, a call chained onto something that is not itself a call) — is `UNEXPECTED_TOKEN` or
 `EXPRESSION_OUTSIDE_FUNCTION`, exactly as an unrecognized token would be anywhere else.
 
+## `$field(name)`: field access for names plain syntax cannot express
+
+`address.city` cannot name every field: some names are reserved words (`in`, `not`, ...), contain
+characters outside the identifier rules (`first-name`), or are only known at query time. `$field` covers
+all three cases.
+
+```
+$field('in')                 -- a field literally named "in"
+$field('address.city')       -- a dotted path, exactly like address.city
+$field(@column)              -- the field named by whatever @column holds
+```
+
+* The argument must be a string literal or a variable — nothing else. `$field(a)`, `$field(1)`, and
+  `$field(a.b)` are all `INVALID_FIELD_ARGUMENT`.
+* `$field` reads from the current element, exactly like a bare identifier or `~`. It cannot be called on a
+  target: `row.$field('x')` is `INVALID_TARGET` (`must start the chain`), for the same reason `$source`
+  cannot — but a leading `$let` chain is transparent to it, just as it is to `$source`.
+* Used outside an element-scoped function, `$field` is `ITEM_OUT_OF_CONTEXT`, the same as `~`.
+
+### String literal: resolved at analysis time
+
+`$field('address.city')` is resolved exactly like the equivalent path syntax, segment by segment, against
+the current element's (statically known) type. The same errors apply: `TYPE_MISMATCH` if a segment's target
+isn't an object, `UNKNOWN_IDENTIFIER` if a field or the path's root doesn't exist. An empty segment (`''`,
+`'a.'`, `'.a'`, `'a..b'`) is `INVALID_FIELD_ARGUMENT`.
+
+### Variable: resolved at execution time
+
+`$field(@column)` cannot be type-checked in advance — the field name is only known once `@column`'s value
+is read. The analyzer only checks that `@column` itself is defined, and gives the call type `any`, the same
+type used elsewhere for values a provider can only describe at runtime.
+
+* The variable is read once, when the query is compiled — not once per row — consistent with how every
+  other variable is used (see [`Variables.md`](Variables.md#evaluation)).
+* Its value must be a string (a plain name or a dotted path). Anything else is `INVALID_FIELD_ARGUMENT`,
+  raised at that point rather than during analysis, because the analyzer cannot see the value.
+* Unlike the string-literal form, a missing field or a non-object intermediate is not an error at
+  execution time — it simply reads as null, the same way any other missing field does. There is no static
+  type to check the path against, so there is nothing to reject in advance.
+
 ## Error reference
 
 | Situation | Code |
@@ -92,6 +132,10 @@ field name is expected) or after a plain field reference where a call was expect
 | A field access step's target is not an object | `TYPE_MISMATCH` |
 | A field named in a path does not exist on its (object) target | `UNKNOWN_IDENTIFIER` |
 | The root identifier of a path does not exist at all | `UNKNOWN_IDENTIFIER` |
+| `$field`'s argument is not a string literal or a variable | `INVALID_FIELD_ARGUMENT` |
+| `$field`'s string literal is an empty or malformed path | `INVALID_FIELD_ARGUMENT` |
+| `$field(@variable)`'s bound value is not a string, found at execution time | `INVALID_FIELD_ARGUMENT` |
+| `$field` called on a target | `INVALID_TARGET` |
 
 ## What is deliberately out of scope for this version
 
@@ -99,5 +143,5 @@ field name is expected) or after a plain field reference where a call was expect
   object through a path may be added later without changing anything specified here.
 * **`~~` (the parent element)**, for nested collections — not needed until collections can appear inside
   other collections' predicates, which is a later extension.
-* **`$field`**, for field names that are not valid identifiers or that are chosen dynamically (via a
-  variable). It reuses the object-field lookup described here but is specified separately.
+* **Paths after `$field(@variable)`'s own result** (`$field(@x).y`). `$field`'s result is always a leaf
+  value in v1; chaining a further path onto it may be added later without changing anything specified here.

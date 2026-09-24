@@ -35,6 +35,7 @@ public enum QueryErrorCode
 
     // ~ dan path
     ItemOutOfContext,
+    InvalidFieldArgument,
 
     // Batas keamanan (dipakai saat batas-batas itu diimplementasikan)
     InputTooLong,

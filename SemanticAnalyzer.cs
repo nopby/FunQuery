@@ -474,15 +474,21 @@ public static class SemanticAnalyzer
                 $"Unknown function '{functionName}'.",
                 expression.Function);
 
-        // $let bukan function data biasa: ia tidak mengubah data (pass-through target),
-        // dan tidak tunduk pada TargetRule/parameter generik, karena argumen pertamanya
-        // adalah deklarasi (nama variable), bukan nilai yang dievaluasi. Dicocokkan lewat nama
-        // (bukan identitas objek), sehingga tetap berfungsi bila $let didaftarkan oleh ekstensi lain.
+        // 3. Validasi target sebelum argumen, karena scope argumen bergantung pada tipe target.
+        // Berlaku juga untuk $let (Optional, jadi selalu lolos) dan $field (Forbidden, dengan
+        // $let di depannya tetap transparan lewat HasRealTarget), supaya keduanya tidak perlu
+        // menduplikasi pengecekan target sendiri-sendiri.
+        ValidateTarget(expression, function, context);
+
+        // $let dan $field bukan function data biasa: keduanya tidak tunduk pada
+        // parameter/argumen generik, karena bentuk argumennya khusus (deklarasi variable
+        // untuk $let; nama field statis atau variable untuk $field). Dicocokkan lewat nama
+        // (bukan identitas objek), sehingga tetap berfungsi bila didaftarkan oleh ekstensi lain.
         if (functionName == "$let")
             return AnalyzeLet(expression, context);
 
-        // 3. Validasi target sebelum argumen, karena scope argumen bergantung pada tipe target
-        ValidateTarget(expression, function, context);
+        if (functionName == "$field")
+            return AnalyzeField(expression, context);
 
         var targetType = expression.Target?.SemanticType;
 
@@ -612,6 +618,110 @@ public static class SemanticAnalyzer
         expression.SemanticType = fieldType;
 
         return expression;
+    }
+
+    /// <summary>
+    /// $field(name) atau $field(@variable): merujuk field dari elemen saat ini, untuk nama yang
+    /// bentrok kata cadangan, mengandung karakter di luar aturan identifier, atau ditentukan
+    /// lewat variable. Lihat docs/FieldAccess.md.
+    /// </summary>
+    private static CallExpression AnalyzeField(CallExpression expression, SemanticContext context)
+    {
+        if (expression.Arguments.Count != 1)
+            throw new QueryException(
+                QueryErrorCode.InvalidArgumentCount,
+                "Function '$field' requires exactly 1 argument: " +
+                "$field(name) or $field(@variable).",
+                expression.Function);
+
+        var argument = expression.Arguments[0];
+
+        expression.SemanticType = argument switch
+        {
+            ValueExpression { Token.Type: TokenType.StringLiteral } value =>
+                AnalyzeFieldPath(value, expression, context),
+
+            VariableExpression variable =>
+                AnalyzeDynamicField(variable, expression, context),
+
+            _ => throw new QueryException(
+                QueryErrorCode.InvalidFieldArgument,
+                "The argument of '$field' must be a string literal or a variable, " +
+                "e.g. $field('name') or $field(@column).",
+                argument.Span),
+        };
+
+        return expression;
+    }
+
+    private static SemanticType AnalyzeFieldPath(
+        ValueExpression value,
+        CallExpression expression,
+        SemanticContext context)
+    {
+        var path = context.GetStringLiteralValue(value);
+
+        var elementType = context.CurrentElementType
+            ?? throw new QueryException(
+                QueryErrorCode.ItemOutOfContext,
+                "'$field' can only be used inside a function that evaluates per element, " +
+                "such as $filter.",
+                expression.Span);
+
+        return ResolveFieldPath(elementType, path, value.Span);
+    }
+
+    /// <summary>Menelusuri path bertitik (mis. "address.city") dari sebuah tipe object.</summary>
+    private static SemanticType ResolveFieldPath(SemanticType root, string path, SourceSpan span)
+    {
+        var current = root;
+
+        foreach (var segment in path.Split('.'))
+        {
+            if (segment.Length == 0)
+                throw new QueryException(
+                    QueryErrorCode.InvalidFieldArgument,
+                    $"Invalid field path '{path}'.",
+                    span);
+
+            if (current is not ObjectType obj)
+                throw new QueryException(
+                    QueryErrorCode.TypeMismatch,
+                    $"Cannot access field '{segment}' on {current.Name}.",
+                    span);
+
+            if (!obj.Fields.TryGetValue(segment, out var next))
+                throw new QueryException(
+                    QueryErrorCode.UnknownIdentifier,
+                    $"Unknown field '{segment}'.",
+                    span);
+
+            current = next;
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// $field(@var): nama field baru diketahui saat runtime, jadi tipenya tidak bisa
+    /// ditentukan saat analisis. Hanya memastikan variable-nya sendiri terdefinisi dan bahwa
+    /// pemanggilan ini memang berada di dalam konteks elemen.
+    /// </summary>
+    private static SemanticType AnalyzeDynamicField(
+        VariableExpression variable,
+        CallExpression expression,
+        SemanticContext context)
+    {
+        Analyze(variable, context);
+
+        if (context.CurrentElementType is null)
+            throw new QueryException(
+                QueryErrorCode.ItemOutOfContext,
+                "'$field' can only be used inside a function that evaluates per element, " +
+                "such as $filter.",
+                expression.Span);
+
+        return SemanticTypeOptions.AnyType;
     }
 
     private static VariableExpression AnalyzeVariable(

@@ -98,11 +98,27 @@ public class SemanticAnalyzerTests
     }
 
     [Fact]
-    public void ArrayOfObjectsWithDifferentFields_IsRejected()
+    public void ArrayOfObjectsWithDifferentFields_NowUnifiesIntoTheUnionOfBothFieldSets()
+    {
+        // Heterogeneous objects unify (docs/DataTypes.md#objects): a field missing from one
+        // side simply reads as null on rows that lack it. Only a genuine type conflict on a
+        // field present on both sides is rejected (see ArrayOfObjectsWithConflictingFieldType).
+        var result = QueryPipeline.Analyze("$source([{id: 1}, {name: 'x'}])");
+
+        var array = Assert.IsType<ArrayType>(result.SemanticType);
+        var element = Assert.IsType<ObjectType>(array.Type);
+
+        Assert.Equal(2, element.Fields.Count);
+        Assert.Equal("int", element.Fields["id"].Name);
+        Assert.Equal("string", element.Fields["name"].Name);
+    }
+
+    [Fact]
+    public void ArrayOfObjectsWithConflictingFieldType_IsStillRejected()
     {
         AssertFails(
             QueryErrorCode.IncompatibleElementTypes,
-            "$source([{id: 1}, {name: 'x'}])");
+            "$source([{id: 1}, {id: 'x'}])");
     }
 
     [Fact]

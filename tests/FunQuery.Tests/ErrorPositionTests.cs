@@ -55,7 +55,6 @@ public class ErrorPositionTests
     [InlineData("$source([{id:1}]).$filter(id eq 1 and id)", QueryErrorCode.TypeMismatch, 38, 2)]
     [InlineData("$source([{id:1}]).$filter(id and id eq 1)", QueryErrorCode.TypeMismatch, 26, 2)]
     [InlineData("$source([{id:1}]).$filter(id eq 1).$filter(id eq 'x')", QueryErrorCode.TypeMismatch, 43, 9)]
-    [InlineData("$source([{id:1},{id:2,name:'x'}])", QueryErrorCode.IncompatibleElementTypes, 16, 15)]
     [InlineData("$source([1,'a'])", QueryErrorCode.IncompatibleElementTypes, 11, 3)]
     // ---- analyzer: names and numbers
     [InlineData("$source([{id:1}]).$filter(id gt null)", QueryErrorCode.TypeMismatch, 26, 10)]

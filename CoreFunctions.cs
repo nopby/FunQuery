@@ -33,6 +33,17 @@ public sealed class CoreFunctions : IQueryExtension
 
         registry.Add(new FunctionDefinition
         {
+            // $field(name) atau $field(@variable): dianalisis dan dieksekusi secara khusus
+            // (lihat SemanticAnalyzer.AnalyzeField dan CoreInMemoryFunctions.Field).
+            // TargetRule.Forbidden supaya tidak bisa dirantai pada data (x.$field(...)),
+            // sama seperti $source, tapi tetap transparan terhadap $let di depannya.
+            Name = "$field",
+            Parameters = [],
+            TargetRule = TargetRule.Forbidden,
+        });
+
+        registry.Add(new FunctionDefinition
+        {
             Name = "$filter",
             Parameters = [ParameterDefinition.Of<BooleanType>("predicate", "bool")],
             TargetRule = TargetRule.Required,

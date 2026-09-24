@@ -1,0 +1,1018 @@
+diff --git a/CoreFunctions.cs b/CoreFunctions.cs
+index 8d00d46..1520c4e 100644
+--- a/CoreFunctions.cs
++++ b/CoreFunctions.cs
+@@ -31,6 +31,17 @@ public sealed class CoreFunctions : IQueryExtension
+             TargetRule = TargetRule.Optional,
+         });
+ 
++        registry.Add(new FunctionDefinition
++        {
++            // $field(name) atau $field(@variable): dianalisis dan dieksekusi secara khusus
++            // (lihat SemanticAnalyzer.AnalyzeField dan CoreInMemoryFunctions.Field).
++            // TargetRule.Forbidden supaya tidak bisa dirantai pada data (x.$field(...)),
++            // sama seperti $source, tapi tetap transparan terhadap $let di depannya.
++            Name = "$field",
++            Parameters = [],
++            TargetRule = TargetRule.Forbidden,
++        });
++
+         registry.Add(new FunctionDefinition
+         {
+             Name = "$filter",
+diff --git a/Enums/QueryErrorCode.cs b/Enums/QueryErrorCode.cs
+index 80bc28a..5159a5f 100644
+--- a/Enums/QueryErrorCode.cs
++++ b/Enums/QueryErrorCode.cs
+@@ -35,6 +35,7 @@ public enum QueryErrorCode
+ 
+     // ~ dan path
+     ItemOutOfContext,
++    InvalidFieldArgument,
+ 
+     // Batas keamanan (dipakai saat batas-batas itu diimplementasikan)
+     InputTooLong,
+diff --git a/Execution/CoreInMemoryFunctions.cs b/Execution/CoreInMemoryFunctions.cs
+index 2b6ec43..6c90429 100644
+--- a/Execution/CoreInMemoryFunctions.cs
++++ b/Execution/CoreInMemoryFunctions.cs
+@@ -50,6 +50,50 @@ internal static class CoreInMemoryFunctions
+         return targetFn;
+     }
+ 
++    /// <summary>
++    /// $field(name) atau $field(@variable): membaca field dari elemen saat ini lewat path
++    /// bertitik (mis. "address.city"). Path diketahui sekali di sini (baik dari literal
++    /// maupun dari nilai variable yang sudah terikat), lalu dipakai sebagai segmen tetap
++    /// untuk setiap baris. Field atau segmen yang hilang dibaca sebagai null, sama seperti
++    /// FieldAccessExpression biasa. Lihat docs/FieldAccess.md.
++    /// </summary>
++    public static Func<object?, object?> Field(InMemoryCompiler compiler, CallExpression call)
++    {
++        var argument = call.Arguments[0];
++
++        var path = argument switch
++        {
++            ValueExpression value => compiler.GetStringLiteralValue(value),
++
++            VariableExpression variable =>
++                compiler.ResolveVariable(compiler.GetVariableName(variable)) as string
++                ?? throw new QueryException(
++                    QueryErrorCode.InvalidFieldArgument,
++                    "The variable given to '$field' must resolve to a string field name or path.",
++                    variable.Span),
++
++            _ => throw new QueryException(
++                QueryErrorCode.InternalError,
++                "$field's argument must be a string literal or a variable."),
++        };
++
++        var segments = path.Split('.');
++
++        return element =>
++        {
++            object? current = element;
++
++            foreach (var segment in segments)
++            {
++                current = current is ObjectValue row && row.TryGetValue(segment, out var value)
++                    ? value
++                    : null;
++            }
++
++            return current;
++        };
++    }
++
+     /// <summary>$filter(predicate): menyaring elemen. Predikat dihitung terhadap tiap elemen.</summary>
+     public static Func<object?, object?> Filter(InMemoryCompiler compiler, CallExpression call)
+     {
+diff --git a/Execution/InMemoryCompiler.cs b/Execution/InMemoryCompiler.cs
+index 82b88d3..41746d0 100644
+--- a/Execution/InMemoryCompiler.cs
++++ b/Execution/InMemoryCompiler.cs
+@@ -89,6 +89,9 @@ public sealed class InMemoryCompiler
+     private string TextOf(Token token) =>
+         _source.Span[token.StartPosition..token.EndPosition].ToString();
+ 
++    internal string GetStringLiteralValue(ValueExpression expression) =>
++        StringLiteral.Unquote(_source.Span[expression.Token.StartPosition..expression.Token.EndPosition]);
++
+     private Func<object?, object?> CompileValue(ValueExpression expression)
+     {
+         object? constant;
+diff --git a/Execution/InMemoryFunctions.cs b/Execution/InMemoryFunctions.cs
+index 3db8232..be1af97 100644
+--- a/Execution/InMemoryFunctions.cs
++++ b/Execution/InMemoryFunctions.cs
+@@ -44,5 +44,6 @@ public sealed class InMemoryFunctions
+         new InMemoryFunctions()
+             .Add("$source", CoreInMemoryFunctions.Source)
+             .Add("$let", CoreInMemoryFunctions.Let)
++            .Add("$field", CoreInMemoryFunctions.Field)
+             .Add("$filter", CoreInMemoryFunctions.Filter);
+ }
+diff --git a/Extensions/QueryErrorCodeExtensions.cs b/Extensions/QueryErrorCodeExtensions.cs
+index 0ced282..06cac23 100644
+--- a/Extensions/QueryErrorCodeExtensions.cs
++++ b/Extensions/QueryErrorCodeExtensions.cs
+@@ -32,6 +32,7 @@ public static class QueryErrorCodeExtensions
+         QueryErrorCode.VariableRedefined => "VARIABLE_REDEFINED",
+         QueryErrorCode.InvalidLetTarget => "INVALID_LET_TARGET",
+         QueryErrorCode.ItemOutOfContext => "ITEM_OUT_OF_CONTEXT",
++        QueryErrorCode.InvalidFieldArgument => "INVALID_FIELD_ARGUMENT",
+ 
+         QueryErrorCode.InputTooLong => "INPUT_TOO_LONG",
+         QueryErrorCode.MaxDepthExceeded => "MAX_DEPTH_EXCEEDED",
+diff --git a/README.md b/README.md
+index 0a31729..0a93c92 100644
+--- a/README.md
++++ b/README.md
+@@ -99,7 +99,7 @@ The roadmap is divided into vertical milestones. Each milestone has a concrete d
+ | 0         | Fondasi                  | ✅     |
+ | 1         | Hardening front-end      | ✅      |
+ | 2         | First vertical slice     | ✅      |
+-| 3         | Completing the language  | 🚧      |
++| 3         | Completing the language  | ✅      |
+ | 4         | Function set v1          | ⏳      |
+ | 5         | ASP.NET Core integration | ⏳      |
+ | 6         | Providers                | ⏳      |
+diff --git a/SemanticAnalyzer.cs b/SemanticAnalyzer.cs
+index f391a84..0197a33 100644
+--- a/SemanticAnalyzer.cs
++++ b/SemanticAnalyzer.cs
+@@ -474,15 +474,21 @@ public static class SemanticAnalyzer
+                 $"Unknown function '{functionName}'.",
+                 expression.Function);
+ 
+-        // $let bukan function data biasa: ia tidak mengubah data (pass-through target),
+-        // dan tidak tunduk pada TargetRule/parameter generik, karena argumen pertamanya
+-        // adalah deklarasi (nama variable), bukan nilai yang dievaluasi. Dicocokkan lewat nama
+-        // (bukan identitas objek), sehingga tetap berfungsi bila $let didaftarkan oleh ekstensi lain.
++        // 3. Validasi target sebelum argumen, karena scope argumen bergantung pada tipe target.
++        // Berlaku juga untuk $let (Optional, jadi selalu lolos) dan $field (Forbidden, dengan
++        // $let di depannya tetap transparan lewat HasRealTarget), supaya keduanya tidak perlu
++        // menduplikasi pengecekan target sendiri-sendiri.
++        ValidateTarget(expression, function, context);
++
++        // $let dan $field bukan function data biasa: keduanya tidak tunduk pada
++        // parameter/argumen generik, karena bentuk argumennya khusus (deklarasi variable
++        // untuk $let; nama field statis atau variable untuk $field). Dicocokkan lewat nama
++        // (bukan identitas objek), sehingga tetap berfungsi bila didaftarkan oleh ekstensi lain.
+         if (functionName == "$let")
+             return AnalyzeLet(expression, context);
+ 
+-        // 3. Validasi target sebelum argumen, karena scope argumen bergantung pada tipe target
+-        ValidateTarget(expression, function, context);
++        if (functionName == "$field")
++            return AnalyzeField(expression, context);
+ 
+         var targetType = expression.Target?.SemanticType;
+ 
+@@ -614,6 +620,110 @@ public static class SemanticAnalyzer
+         return expression;
+     }
+ 
++    /// <summary>
++    /// $field(name) atau $field(@variable): merujuk field dari elemen saat ini, untuk nama yang
++    /// bentrok kata cadangan, mengandung karakter di luar aturan identifier, atau ditentukan
++    /// lewat variable. Lihat docs/FieldAccess.md.
++    /// </summary>
++    private static CallExpression AnalyzeField(CallExpression expression, SemanticContext context)
++    {
++        if (expression.Arguments.Count != 1)
++            throw new QueryException(
++                QueryErrorCode.InvalidArgumentCount,
++                "Function '$field' requires exactly 1 argument: " +
++                "$field(name) or $field(@variable).",
++                expression.Function);
++
++        var argument = expression.Arguments[0];
++
++        expression.SemanticType = argument switch
++        {
++            ValueExpression { Token.Type: TokenType.StringLiteral } value =>
++                AnalyzeFieldPath(value, expression, context),
++
++            VariableExpression variable =>
++                AnalyzeDynamicField(variable, expression, context),
++
++            _ => throw new QueryException(
++                QueryErrorCode.InvalidFieldArgument,
++                "The argument of '$field' must be a string literal or a variable, " +
++                "e.g. $field('name') or $field(@column).",
++                argument.Span),
++        };
++
++        return expression;
++    }
++
++    private static SemanticType AnalyzeFieldPath(
++        ValueExpression value,
++        CallExpression expression,
++        SemanticContext context)
++    {
++        var path = context.GetStringLiteralValue(value);
++
++        var elementType = context.CurrentElementType
++            ?? throw new QueryException(
++                QueryErrorCode.ItemOutOfContext,
++                "'$field' can only be used inside a function that evaluates per element, " +
++                "such as $filter.",
++                expression.Span);
++
++        return ResolveFieldPath(elementType, path, value.Span);
++    }
++
++    /// <summary>Menelusuri path bertitik (mis. "address.city") dari sebuah tipe object.</summary>
++    private static SemanticType ResolveFieldPath(SemanticType root, string path, SourceSpan span)
++    {
++        var current = root;
++
++        foreach (var segment in path.Split('.'))
++        {
++            if (segment.Length == 0)
++                throw new QueryException(
++                    QueryErrorCode.InvalidFieldArgument,
++                    $"Invalid field path '{path}'.",
++                    span);
++
++            if (current is not ObjectType obj)
++                throw new QueryException(
++                    QueryErrorCode.TypeMismatch,
++                    $"Cannot access field '{segment}' on {current.Name}.",
++                    span);
++
++            if (!obj.Fields.TryGetValue(segment, out var next))
++                throw new QueryException(
++                    QueryErrorCode.UnknownIdentifier,
++                    $"Unknown field '{segment}'.",
++                    span);
++
++            current = next;
++        }
++
++        return current;
++    }
++
++    /// <summary>
++    /// $field(@var): nama field baru diketahui saat runtime, jadi tipenya tidak bisa
++    /// ditentukan saat analisis. Hanya memastikan variable-nya sendiri terdefinisi dan bahwa
++    /// pemanggilan ini memang berada di dalam konteks elemen.
++    /// </summary>
++    private static SemanticType AnalyzeDynamicField(
++        VariableExpression variable,
++        CallExpression expression,
++        SemanticContext context)
++    {
++        Analyze(variable, context);
++
++        if (context.CurrentElementType is null)
++            throw new QueryException(
++                QueryErrorCode.ItemOutOfContext,
++                "'$field' can only be used inside a function that evaluates per element, " +
++                "such as $filter.",
++                expression.Span);
++
++        return SemanticTypeOptions.AnyType;
++    }
++
+     private static VariableExpression AnalyzeVariable(
+         VariableExpression expression,
+         SemanticContext context)
+diff --git a/SemanticContext.cs b/SemanticContext.cs
+index 21a6f26..affcc21 100644
+--- a/SemanticContext.cs
++++ b/SemanticContext.cs
+@@ -81,6 +81,10 @@ public sealed class SemanticContext
+     public string GetFieldAccessName(FieldAccessExpression expression) =>
+         GetText(expression.Field);
+ 
++    /// <summary>Isi sebuah string literal (tanpa tanda kutip, '' sudah di-unescape).</summary>
++    public string GetStringLiteralValue(ValueExpression expression) =>
++        StringLiteral.Unquote(_source.Span[expression.Token.StartPosition..expression.Token.EndPosition]);
++
+     // ------------------------------------------------------------------
+     // Variable (@nama)
+     // ------------------------------------------------------------------
+@@ -211,15 +215,15 @@ public sealed class SemanticContext
+ 
+             if (unified is null)
+             {
+-                var message = elementTypeSoFar is ObjectType && elementType is ObjectType
+-                    ? $"Array element at index {i} has different fields than the first element."
+-                    : $"Array elements must have compatible types. " +
+-                      $"Expected {elementTypeSoFar.Name}, " +
+-                      $"got {elementType.Name} at index {i}.";
+-
++                // Field yang hanya ada di sebagian elemen tidak lagi jadi alasan gagal (lihat
++                // Unify), jadi kegagalan di sini selalu berarti ada field yang sama namanya
++                // tapi tipenya benar-benar tidak sejalan (atau tipe elemen yang sama sekali
++                // beda keluarga, mis. int dan string).
+                 throw new QueryException(
+                     QueryErrorCode.IncompatibleElementTypes,
+-                    message,
++                    $"Array elements must have compatible types. " +
++                    $"Expected {elementTypeSoFar.Name}, " +
++                    $"got {elementType.Name} at index {i}.",
+                     expression.Elements[i].Span);
+             }
+ 
+@@ -308,6 +312,11 @@ public sealed class SemanticContext
+         if (right is NullType)
+             return left;
+ 
++        var widened = WidenNumeric(left, right);
++
++        if (widened is not null)
++            return widened;
++
+         if (left is ArrayType la && right is ArrayType ra)
+         {
+             // Array kosong (element Unknown) menyatu dengan array apa pun.
+@@ -323,25 +332,29 @@ public sealed class SemanticContext
+         }
+ 
+         // ObjectType berisi dictionary sehingga equality bawaan record
+-        // membandingkan referensi. Gabungkan secara struktural.
++        // membandingkan referensi. Gabungkan secara struktural, sebagai UNION field, bukan
++        // irisan: field yang hanya ada di salah satu sisi tetap ikut (dibaca null pada baris
++        // yang tidak memilikinya, lihat docs/DataTypes.md#objects). Hanya field yang ADA di
++        // kedua sisi dan tipenya benar-benar tidak sejalan yang membuat unify gagal.
+         if (left is ObjectType lo && right is ObjectType ro)
+         {
+-            if (lo.Fields.Count != ro.Fields.Count)
+-                return null;
+-
+-            var fields = new Dictionary<string, SemanticType>(lo.Fields.Count);
++            var fields = new Dictionary<string, SemanticType>(
++                Math.Max(lo.Fields.Count, ro.Fields.Count),
++                StringComparer.Ordinal);
+ 
+-            foreach (var field in lo.Fields)
++            foreach (var key in lo.Fields.Keys.Union(ro.Fields.Keys, StringComparer.Ordinal))
+             {
+-                if (!ro.Fields.TryGetValue(field.Key, out var other))
+-                    return null;
++                var hasLeft = lo.Fields.TryGetValue(key, out var leftFieldType);
++                var hasRight = ro.Fields.TryGetValue(key, out var rightFieldType);
+ 
+-                var merged = Unify(field.Value, other);
++                SemanticType? merged = hasLeft && hasRight
++                    ? Unify(leftFieldType!, rightFieldType!)
++                    : hasLeft ? leftFieldType : rightFieldType;
+ 
+                 if (merged is null)
+                     return null;
+ 
+-                fields[field.Key] = merged;
++                fields[key] = merged;
+             }
+ 
+             return new ObjectType(fields);
+@@ -350,6 +363,41 @@ public sealed class SemanticContext
+         return null;
+     }
+ 
++    /// <summary>
++    /// Melebarkan dua tipe angka ke tipe yang lebih luas (int &lt; long &lt; decimal, dan
++    /// terpisah float &lt; double), atau null bila keduanya bukan pasangan angka yang sama
++    /// keluarganya (exact atau approximate). Lihat docs/DataTypes.md#numbers.
++    /// </summary>
++    private static SemanticType? WidenNumeric(SemanticType left, SemanticType right)
++    {
++        var exactLeft = Array.IndexOf(ExactNumericOrder, left);
++        var exactRight = Array.IndexOf(ExactNumericOrder, right);
++
++        if (exactLeft >= 0 && exactRight >= 0)
++            return ExactNumericOrder[Math.Max(exactLeft, exactRight)];
++
++        var approximateLeft = Array.IndexOf(ApproximateNumericOrder, left);
++        var approximateRight = Array.IndexOf(ApproximateNumericOrder, right);
++
++        if (approximateLeft >= 0 && approximateRight >= 0)
++            return ApproximateNumericOrder[Math.Max(approximateLeft, approximateRight)];
++
++        return null;
++    }
++
++    private static readonly SemanticType[] ExactNumericOrder =
++    [
++        SemanticTypeOptions.Int,
++        SemanticTypeOptions.Long,
++        SemanticTypeOptions.Decimal,
++    ];
++
++    private static readonly SemanticType[] ApproximateNumericOrder =
++    [
++        SemanticTypeOptions.Float,
++        SemanticTypeOptions.Double,
++    ];
++
+     /// <summary>
+     /// Nilai tunggal yang boleh dibandingkan: angka, string, dan bool.
+     /// AnyType (tipe belum diketahui saat analisis) diizinkan; array dan object tidak.
+diff --git a/docs/DataTypes.md b/docs/DataTypes.md
+index 8072cfa..25f419b 100644
+--- a/docs/DataTypes.md
++++ b/docs/DataTypes.md
+@@ -69,8 +69,11 @@ Examples: `2147483647` is `int`, `2147483648` is `long`, `9223372036854775807` i
+ both sides were `decimal`, which is lossless for all three types. `1.0 eq 1` is true. The scale of a
+ decimal (the number of trailing zeros) has no effect.
+ 
+-This applies to comparison only. Elements of an array must currently have the same type (see
+-[Arrays](#arrays)).
++The same widening applies inside an array or an object field: `[1, 1.5]` is `array<decimal>`, and
++`{n: 1}` unified with `{n: 1.5}` gives a field of type `decimal`. Widening only ever happens within the
++same numeric family — `int`/`long`/`decimal` widen among themselves, and (separately) `float`/`double`
++widen among themselves — never across the two families, since mixing an exact and an approximate number
++silently would reintroduce the precision problem [floating point](#floating-point) exists to avoid.
+ 
+ ## Floating point
+ 
+@@ -136,10 +139,11 @@ SQL uses three-valued logic. A SQL provider must translate to the two-valued beh
+ ## Arrays
+ 
+ * Written `[a, b, c]`. Trailing commas are rejected. `[]` is allowed.
+-* All elements must currently have the same type. `[1, 'a']` is `INCOMPATIBLE_ELEMENT_TYPES`, and so is
+-  `[1, 1.5]`, because the element types `int` and `decimal` differ. Numeric widening and heterogeneous
+-  arrays arrive in Milestone 3. `null` is the exception: it unifies with any element type (see
+-  [Null](#null)). An empty array unifies with any array, so `[[], [1]]` is an array of `array<int>`.
++* Elements must have a common type: `[1, 'a']` is `INCOMPATIBLE_ELEMENT_TYPES` (a number and a string never
++  unify), but `[1, 1.5]` is `array<decimal>` (numbers of different types widen, see [Numbers](#numbers)),
++  and objects with different field sets unify into their union (see [Objects](#objects)). `null` also
++  unifies with any element type (see [Null](#null)). An empty array unifies with any array, so `[[], [1]]`
++  is an array of `array<int>`.
+ * An array is a value, but it cannot be compared with any operator (see [`Operators.md`](Operators.md)).
+ 
+ ## Objects
+@@ -151,10 +155,12 @@ SQL uses three-valued logic. A SQL provider must translate to the two-valued beh
+   'in': 1}`. A quoted key names the same field as the unquoted identifier, so `{'id': 1}` has the field `id`
+   and `{'a': 1, a: 2}` is a duplicate. Field names are case-sensitive.
+ * Duplicate names in one object are rejected (`DUPLICATE_FIELD`).
+-* In an array of objects, every object must currently have the same set of fields with compatible types.
+-  Field order does not matter. Numeric widening and sources with genuinely missing fields (a field present
+-  in some rows but absent in others) are still open, tracked as the remaining part of Milestone 3.
++* In an array of objects, every object's fields are unified into their union: a field present in some
++  objects but not others is simply absent from the rows that lack it, and reads as `null` there (see
++  [Null](#null)). Only a field present on **both** sides with genuinely incompatible types fails, with
++  `INCOMPATIBLE_ELEMENT_TYPES`. Field order never matters.
+ * An object cannot be compared with any operator.
++* A nested object field, on rows where it is present, works exactly as if every row had it.
+ * A nested object field can be reached with a dotted path (`address.city`), specified in
+   [`FieldAccess.md`](FieldAccess.md), which also specifies `~`, the current element.
+ 
+diff --git a/docs/FieldAccess.md b/docs/FieldAccess.md
+index 6785a6e..e33757d 100644
+--- a/docs/FieldAccess.md
++++ b/docs/FieldAccess.md
+@@ -84,6 +84,46 @@ field name is expected) or after a plain field reference where a call was expect
+ (`$filter(a).$nope()`, a call chained onto something that is not itself a call) — is `UNEXPECTED_TOKEN` or
+ `EXPRESSION_OUTSIDE_FUNCTION`, exactly as an unrecognized token would be anywhere else.
+ 
++## `$field(name)`: field access for names plain syntax cannot express
++
++`address.city` cannot name every field: some names are reserved words (`in`, `not`, ...), contain
++characters outside the identifier rules (`first-name`), or are only known at query time. `$field` covers
++all three cases.
++
++```
++$field('in')                 -- a field literally named "in"
++$field('address.city')       -- a dotted path, exactly like address.city
++$field(@column)              -- the field named by whatever @column holds
++```
++
++* The argument must be a string literal or a variable — nothing else. `$field(a)`, `$field(1)`, and
++  `$field(a.b)` are all `INVALID_FIELD_ARGUMENT`.
++* `$field` reads from the current element, exactly like a bare identifier or `~`. It cannot be called on a
++  target: `row.$field('x')` is `INVALID_TARGET` (`must start the chain`), for the same reason `$source`
++  cannot — but a leading `$let` chain is transparent to it, just as it is to `$source`.
++* Used outside an element-scoped function, `$field` is `ITEM_OUT_OF_CONTEXT`, the same as `~`.
++
++### String literal: resolved at analysis time
++
++`$field('address.city')` is resolved exactly like the equivalent path syntax, segment by segment, against
++the current element's (statically known) type. The same errors apply: `TYPE_MISMATCH` if a segment's target
++isn't an object, `UNKNOWN_IDENTIFIER` if a field or the path's root doesn't exist. An empty segment (`''`,
++`'a.'`, `'.a'`, `'a..b'`) is `INVALID_FIELD_ARGUMENT`.
++
++### Variable: resolved at execution time
++
++`$field(@column)` cannot be type-checked in advance — the field name is only known once `@column`'s value
++is read. The analyzer only checks that `@column` itself is defined, and gives the call type `any`, the same
++type used elsewhere for values a provider can only describe at runtime.
++
++* The variable is read once, when the query is compiled — not once per row — consistent with how every
++  other variable is used (see [`Variables.md`](Variables.md#evaluation)).
++* Its value must be a string (a plain name or a dotted path). Anything else is `INVALID_FIELD_ARGUMENT`,
++  raised at that point rather than during analysis, because the analyzer cannot see the value.
++* Unlike the string-literal form, a missing field or a non-object intermediate is not an error at
++  execution time — it simply reads as null, the same way any other missing field does. There is no static
++  type to check the path against, so there is nothing to reject in advance.
++
+ ## Error reference
+ 
+ | Situation | Code |
+@@ -92,6 +132,10 @@ field name is expected) or after a plain field reference where a call was expect
+ | A field access step's target is not an object | `TYPE_MISMATCH` |
+ | A field named in a path does not exist on its (object) target | `UNKNOWN_IDENTIFIER` |
+ | The root identifier of a path does not exist at all | `UNKNOWN_IDENTIFIER` |
++| `$field`'s argument is not a string literal or a variable | `INVALID_FIELD_ARGUMENT` |
++| `$field`'s string literal is an empty or malformed path | `INVALID_FIELD_ARGUMENT` |
++| `$field(@variable)`'s bound value is not a string, found at execution time | `INVALID_FIELD_ARGUMENT` |
++| `$field` called on a target | `INVALID_TARGET` |
+ 
+ ## What is deliberately out of scope for this version
+ 
+@@ -99,5 +143,5 @@ field name is expected) or after a plain field reference where a call was expect
+   object through a path may be added later without changing anything specified here.
+ * **`~~` (the parent element)**, for nested collections — not needed until collections can appear inside
+   other collections' predicates, which is a later extension.
+-* **`$field`**, for field names that are not valid identifiers or that are chosen dynamically (via a
+-  variable). It reuses the object-field lookup described here but is specified separately.
++* **Paths after `$field(@variable)`'s own result** (`$field(@x).y`). `$field`'s result is always a leaf
++  value in v1; chaining a further path onto it may be added later without changing anything specified here.
+diff --git a/tests/FunQuery.Tests/AdversarialInputTests.cs b/tests/FunQuery.Tests/AdversarialInputTests.cs
+index 2e5f3aa..52c8c76 100644
+--- a/tests/FunQuery.Tests/AdversarialInputTests.cs
++++ b/tests/FunQuery.Tests/AdversarialInputTests.cs
+@@ -93,7 +93,7 @@ public class AdversarialInputTests
+     private static readonly string[] Fragments =
+     [
+         "$source", "$filter", "$x", "(", ")", "[", "]", "{", "}", ",", ":", ".", " ",
+-        "id", "name", "eq", "neq", "gt", "and", "or", "1", "2.5", "007", "'x'", "'", "#", "\"", "true", "false", "null", "not", "in", "contains", "startswith", "endswith", "-1", "-", "''", "-2.5", "@x", "@", "$let", "~",
++        "id", "name", "eq", "neq", "gt", "and", "or", "1", "2.5", "007", "'x'", "'", "#", "\"", "true", "false", "null", "not", "in", "contains", "startswith", "endswith", "-1", "-", "''", "-2.5", "@x", "@", "$let", "~", "$field",
+     ];
+ 
+     private static readonly string[] ValidQueries =
+@@ -108,6 +108,8 @@ public class AdversarialInputTests
+         "$let(@a, 1).$let(@b, $source([{n:1}]).$filter(n eq @a)).$source(@b)",
+         "$source([1, 2, 3]).$filter(not ~ gt 1 and ~ neq 2)",
+         "$source([{a: {b: {c: 1}}}]).$filter(a.b.c eq 1 or ~.a.b.c neq 1)",
++        "$source([{id: 1}, {name: 'x'}]).$filter($field('id') eq 1 or name eq 'x')",
++        "$let(@col, 'a.b').$source([{a: {b: 1}}, {a: {b: 2.5}}]).$filter($field(@col) gt 1)",
+     ];
+ 
+     private static readonly QueryEngine Engine = new();
+diff --git a/tests/FunQuery.Tests/ErrorPositionTests.cs b/tests/FunQuery.Tests/ErrorPositionTests.cs
+index 9d6e427..6684671 100644
+--- a/tests/FunQuery.Tests/ErrorPositionTests.cs
++++ b/tests/FunQuery.Tests/ErrorPositionTests.cs
+@@ -55,7 +55,6 @@ public class ErrorPositionTests
+     [InlineData("$source([{id:1}]).$filter(id eq 1 and id)", QueryErrorCode.TypeMismatch, 38, 2)]
+     [InlineData("$source([{id:1}]).$filter(id and id eq 1)", QueryErrorCode.TypeMismatch, 26, 2)]
+     [InlineData("$source([{id:1}]).$filter(id eq 1).$filter(id eq 'x')", QueryErrorCode.TypeMismatch, 43, 9)]
+-    [InlineData("$source([{id:1},{id:2,name:'x'}])", QueryErrorCode.IncompatibleElementTypes, 16, 15)]
+     [InlineData("$source([1,'a'])", QueryErrorCode.IncompatibleElementTypes, 11, 3)]
+     // ---- analyzer: names and numbers
+     [InlineData("$source([{id:1}]).$filter(id gt null)", QueryErrorCode.TypeMismatch, 26, 10)]
+diff --git a/tests/FunQuery.Tests/FieldFunctionTests.cs b/tests/FunQuery.Tests/FieldFunctionTests.cs
+new file mode 100644
+index 0000000..9d4f94c
+--- /dev/null
++++ b/tests/FunQuery.Tests/FieldFunctionTests.cs
+@@ -0,0 +1,240 @@
++using FunQuery.Enums;
++using FunQuery.SemanticTypes;
++using FunQuery.Tests.Support;
++
++namespace FunQuery.Tests;
++
++/// <summary>$field(name) and $field(@variable).</summary>
++public class FieldFunctionTests
++{
++    private static readonly QueryEngine Engine = new();
++
++    private static string Run(string query) => Engine.Execute(query).ToJson();
++
++    // ------------------------------------------------------------------
++    // Argument shape
++    // ------------------------------------------------------------------
++
++    [Theory]
++    [InlineData("$field()")]
++    [InlineData("$field('a', 'b')")]
++    public void FieldRequiresExactlyOneArgument(string call)
++    {
++        QueryAssert.Fails(
++            QueryErrorCode.InvalidArgumentCount,
++            () => QueryPipeline.Analyze($"$source([{{a:1}}]).$filter({call} eq 1)"));
++    }
++
++    [Theory]
++    [InlineData("1")]
++    [InlineData("true")]
++    [InlineData("null")]
++    [InlineData("a")]
++    [InlineData("a.b")]
++    public void FieldsArgumentMustBeAStringLiteralOrAVariable(string argument)
++    {
++        var error = QueryAssert.Fails(
++            QueryErrorCode.InvalidFieldArgument,
++            () => QueryPipeline.Analyze($"$source([{{a:1}}]).$filter($field({argument}) eq 1)"));
++
++        Assert.Contains("string literal or a variable", error.Message);
++    }
++
++    // ------------------------------------------------------------------
++    // Target rule: same as $source, transparent to $let
++    // ------------------------------------------------------------------
++
++    [Fact]
++    public void FieldCannotBeCalledOnATarget()
++    {
++        var error = QueryAssert.Fails(
++            QueryErrorCode.InvalidTarget,
++            () => QueryPipeline.Analyze("$source([{id:1}]).$field('id')"));
++
++        Assert.Contains("must start the chain", error.Message);
++    }
++
++    [Fact]
++    public void FieldIsTransparentToALeadingLet()
++    {
++        // $field itself still needs an active element scope, so this fails on that, not on
++        // the (irrelevant) presence of $let before it.
++        var error = QueryAssert.Fails(
++            QueryErrorCode.ItemOutOfContext,
++            () => QueryPipeline.Analyze("$let(@x, 1).$field('x')"));
++
++        Assert.DoesNotContain("target", error.Message);
++    }
++
++    [Fact]
++    public void FieldAtTheTopLevel_HasNoElementScope()
++    {
++        // $field('a') alone is syntactically a valid call (top-level rule is satisfied),
++        // but there is no element to read a field from.
++        QueryAssert.Fails(QueryErrorCode.ItemOutOfContext, () => QueryPipeline.Analyze("$field('a')"));
++    }
++
++    [Fact]
++    public void FieldOutsideAnElementScope_IsItemOutOfContext()
++    {
++        QueryAssert.Fails(
++            QueryErrorCode.ItemOutOfContext,
++            () => QueryPipeline.Analyze("$source([1]).$let(@x, $field('a'))"));
++    }
++
++    // ------------------------------------------------------------------
++    // Static string literal: resolved at analysis time
++    // ------------------------------------------------------------------
++
++    [Fact]
++    public void FieldWithAReservedWordName_ResolvesTheField()
++    {
++        // "in" cannot be written as a bare identifier (it is an operator keyword), but a row
++        // can still have a field named "in" via a quoted key, and $field can read it.
++        var result = QueryPipeline.Analyze("$source([{'in': 1}]).$filter($field('in') eq 1)");
++
++        Assert.Equal("array", result.SemanticType!.Name);
++    }
++
++    [Fact]
++    public void FieldWithADottedPath_ResolvesANestedField()
++    {
++        var result = QueryPipeline.Analyze(
++            "$source([{addr: {city: 'x'}}]).$filter($field('addr.city') eq 'x')");
++
++        Assert.Equal("array", result.SemanticType!.Name);
++    }
++
++    [Fact]
++    public void FieldAndPlainPathSyntax_AgreeOnTheType()
++    {
++        const string source = "$source([{addr: {city: 'x'}}])";
++
++        var viaField = QueryPipeline.Analyze($"{source}.$filter($field('addr.city') eq 'x')");
++        var viaPath = QueryPipeline.Analyze($"{source}.$filter(addr.city eq 'x')");
++
++        Assert.Equal(viaField.SemanticType!.Name, viaPath.SemanticType!.Name);
++    }
++
++    [Theory]
++    [InlineData("$field('missing')", QueryErrorCode.UnknownIdentifier, "'missing'")]
++    [InlineData("$field('addr.missing')", QueryErrorCode.UnknownIdentifier, "'addr'")]
++    public void UnknownFieldOrRoot_IsReported(string call, QueryErrorCode code, string mention)
++    {
++        var error = QueryAssert.Fails(
++            code,
++            () => QueryPipeline.Analyze($"$source([{{id:1}}]).$filter({call} eq 1)"));
++
++        Assert.Contains(mention, error.Message);
++    }
++
++    [Fact]
++    public void FieldPathThroughANonObjectValue_IsATypeMismatch()
++    {
++        var error = QueryAssert.Fails(
++            QueryErrorCode.TypeMismatch,
++            () => QueryPipeline.Analyze("$source([{id:1}]).$filter($field('id.x') eq 1)"));
++
++        Assert.Contains("Cannot access field 'x' on int", error.Message);
++    }
++
++    [Theory]
++    [InlineData("''")]
++    [InlineData("'.a'")]
++    [InlineData("'a.'")]
++    [InlineData("'a..b'")]
++    public void AMalformedPath_IsInvalidFieldArgument(string literal)
++    {
++        // "a" must itself be an object for the trailing/inner empty segment to even be reached
++        // rather than failing earlier as an unrelated "unknown field" or "not an object" error.
++        QueryAssert.Fails(
++            QueryErrorCode.InvalidFieldArgument,
++            () => QueryPipeline.Analyze($"$source([{{a: {{x: 1}}}}]).$filter($field({literal}) eq 1)"));
++    }
++
++    // ------------------------------------------------------------------
++    // Variable argument: dynamic, resolved to AnyType at analysis time
++    // ------------------------------------------------------------------
++
++    [Fact]
++    public void FieldWithAVariable_HasAnyTypeAtAnalysisTime()
++    {
++        // The value isn't known until execution, so the analyzer permits it broadly, the same
++        // way it permits any provider-supplied "any" typed value.
++        var result = QueryPipeline.Analyze(
++            "$let(@col, 'id').$source([{id: 1}]).$filter($field(@col) eq 1)");
++
++        Assert.Equal("array", result.SemanticType!.Name);
++    }
++
++    [Fact]
++    public void FieldWithAnUndefinedVariable_IsUndefinedVariable()
++    {
++        QueryAssert.Fails(
++            QueryErrorCode.UndefinedVariable,
++            () => QueryPipeline.Analyze("$source([{id:1}]).$filter($field(@missing) eq 1)"));
++    }
++
++    // ------------------------------------------------------------------
++    // Execution
++    // ------------------------------------------------------------------
++
++    [Fact]
++    public void FieldReadsAReservedWordNamedField()
++    {
++        Assert.Equal(
++            """[{"id":1,"in":2}]""",
++            Run("$source([{id: 1, 'in': 2}, {id: 2, 'in': 3}]).$filter($field('in') eq 2)"));
++    }
++
++    [Fact]
++    public void FieldReadsANestedPath()
++    {
++        const string data =
++            "[{id: 1, addr: {city: 'Jakarta'}}, {id: 2, addr: {city: 'Bandung'}}]";
++
++        Assert.Equal(
++            """[{"id":1,"addr":{"city":"Jakarta"}}]""",
++            Run($"$source({data}).$filter($field('addr.city') eq 'Jakarta')"));
++    }
++
++    [Fact]
++    public void FieldWithADynamicColumnName_ReadsTheBoundVariablesValue()
++    {
++        Assert.Equal(
++            """[{"id":1}]""",
++            Run("$let(@col, 'id').$source([{id: 1}, {id: 2}]).$filter($field(@col) eq 1)"));
++    }
++
++    [Fact]
++    public void FieldWithADynamicDottedPath_ReadsTheNestedValue()
++    {
++        const string data = "[{addr: {city: 'Jakarta'}}, {addr: {city: 'Bandung'}}]";
++
++        Assert.Equal(
++            """[{"addr":{"city":"Jakarta"}}]""",
++            Run($"$let(@col, 'addr.city').$source({data}).$filter($field(@col) eq 'Jakarta')"));
++    }
++
++    [Fact]
++    public void FieldWithAMissingSegmentAtRuntime_ReadsAsNull()
++    {
++        // Row 2 lacks "addr" entirely (heterogeneous rows); $field must not throw, only null.
++        const string data = "[{id: 1, addr: {city: 'x'}}, {id: 2}]";
++
++        Assert.Equal(
++            """[{"id":2}]""",
++            Run($"$source({data}).$filter($field('addr.city') eq null)"));
++    }
++
++    [Fact]
++    public void ANonStringVariableGivenToField_IsARuntimeInvalidFieldArgument()
++    {
++        // The analyzer cannot see the variable's concrete value, so this fails only when compiled.
++        var error = QueryAssert.Fails(
++            QueryErrorCode.InvalidFieldArgument,
++            () => Engine.Execute("$let(@col, 1).$source([{id: 1}]).$filter($field(@col) eq 1)"));
++
++        Assert.Contains("must resolve to a string", error.Message);
++    }
++}
+diff --git a/tests/FunQuery.Tests/HeterogeneousTests.cs b/tests/FunQuery.Tests/HeterogeneousTests.cs
+new file mode 100644
+index 0000000..89b2276
+--- /dev/null
++++ b/tests/FunQuery.Tests/HeterogeneousTests.cs
+@@ -0,0 +1,150 @@
++using FunQuery.Enums;
++using FunQuery.SemanticTypes;
++using FunQuery.Tests.Support;
++
++namespace FunQuery.Tests;
++
++/// <summary>Numeric widening and objects with different field sets (docs/DataTypes.md#objects).</summary>
++public class HeterogeneousTests
++{
++    private static readonly QueryEngine Engine = new();
++
++    private static string Run(string query) => Engine.Execute(query).ToJson();
++
++    // ------------------------------------------------------------------
++    // Numeric widening: int < long < decimal
++    // ------------------------------------------------------------------
++
++    private static string ElementTypeOf(string literal)
++    {
++        var result = QueryPipeline.Analyze($"$source([{literal}])");
++
++        return Assert.IsType<ArrayType>(result.SemanticType).Type.Name;
++    }
++
++    [Theory]
++    [InlineData("1, 2", "int")]
++    [InlineData("1, 2147483648", "long")]
++    [InlineData("1, 1.5", "decimal")]
++    [InlineData("2147483648, 1.5", "decimal")]
++    [InlineData("1, 2147483648, 1.5", "decimal")]
++    [InlineData("1.5, 1", "decimal")]
++    public void MixedNumericLiterals_WidenToTheirCommonType(string elements, string expected)
++    {
++        Assert.Equal(expected, ElementTypeOf(elements));
++    }
++
++    [Fact]
++    public void WideningWorksInsideObjectFieldsToo()
++    {
++        var result = QueryPipeline.Analyze("$source([{n: 1}, {n: 1.5}])");
++
++        var array = Assert.IsType<ArrayType>(result.SemanticType);
++        var element = Assert.IsType<ObjectType>(array.Type);
++
++        Assert.Equal("decimal", element.Fields["n"].Name);
++    }
++
++    [Fact]
++    public void WideningWorksInsideNestedArrays()
++    {
++        var result = QueryPipeline.Analyze("$source([[1], [1.5]])");
++
++        var outer = Assert.IsType<ArrayType>(result.SemanticType);
++        var inner = Assert.IsType<ArrayType>(outer.Type);
++
++        Assert.Equal("decimal", inner.Type.Name);
++    }
++
++    [Fact]
++    public void WidenedArraysCompareCorrectlyAtRuntime()
++    {
++        Assert.Equal(
++            "[1.5]",
++            Run("$source([1, 1.5, 2147483648]).$filter(~ gt 1 and ~ lt 2)"));
++    }
++
++    // ------------------------------------------------------------------
++    // Objects with different field sets unify; only real type conflicts fail
++    // ------------------------------------------------------------------
++
++    [Theory]
++    [InlineData("{id: 1}, {name: 'x'}")]
++    [InlineData("{id: 1, name: 'a'}, {id: 2}")]
++    [InlineData("{a: 1}, {b: 2}, {c: 3}")]
++    [InlineData("{a: {x: 1}}, {a: {y: 2}}")]
++    public void ObjectsWithDifferentFieldSets_Unify(string elements)
++    {
++        Assert.NotNull(QueryPipeline.Analyze($"$source([{elements}])").SemanticType);
++    }
++
++    [Theory]
++    [InlineData("{id: 1}, {id: 'x'}")]
++    [InlineData("{id: 1, name: 'a'}, {id: 'x', name: 1}")]
++    [InlineData("{a: {x: 1}}, {a: {x: 'y'}}")]
++    public void ObjectsWithAGenuineFieldTypeConflict_AreStillRejected(string elements)
++    {
++        QueryAssert.Fails(
++            QueryErrorCode.IncompatibleElementTypes,
++            () => QueryPipeline.Analyze($"$source([{elements}])"));
++    }
++
++    [Fact]
++    public void AFieldPresentInOnlySomeRows_UnifiesWithItsOwnType_NotWithNull()
++    {
++        var result = QueryPipeline.Analyze("$source([{id: 1, name: 'a'}, {id: 2}])");
++
++        var array = Assert.IsType<ArrayType>(result.SemanticType);
++        var element = Assert.IsType<ObjectType>(array.Type);
++
++        Assert.Equal("string", element.Fields["name"].Name);
++    }
++
++    // ------------------------------------------------------------------
++    // Execution: missing fields read as null, values are kept per row
++    // ------------------------------------------------------------------
++
++    [Fact]
++    public void RowsWithDifferentFields_KeepTheirOwnFieldsInTheOutput()
++    {
++        Assert.Equal(
++            """[{"id":1,"name":"a"},{"id":2}]""",
++            Run("$source([{id: 1, name: 'a'}, {id: 2}]).$filter(id gt 0)"));
++    }
++
++    [Fact]
++    public void AMissingFieldReadsAsNull_AndCanBeFilteredOn()
++    {
++        const string data = "[{id: 1, name: 'a'}, {id: 2}]";
++
++        Assert.Equal("""[{"id":2}]""", Run($"$source({data}).$filter(name eq null)"));
++        Assert.Equal("""[{"id":1,"name":"a"}]""", Run($"$source({data}).$filter(name neq null)"));
++    }
++
++    [Fact]
++    public void WidenedNumbersKeepTheirOriginalRuntimeValuePerRow()
++    {
++        // The static element type is "decimal", but each row's own literal value and CLR
++        // type are unchanged; only comparisons treat them uniformly.
++        var result = Engine.Execute("$source([{n: 1}, {n: 1.5}])");
++
++        var rows = Assert.IsType<List<object?>>(result.Value);
++
++        Assert.IsType<int>(((FunQuery.Execution.ObjectValue)rows[0]!).GetValueAt(0));
++        Assert.IsType<decimal>(((FunQuery.Execution.ObjectValue)rows[1]!).GetValueAt(0));
++    }
++
++    [Fact]
++    public void HeterogeneousObjectsCombineWithFieldPathsAndTilde()
++    {
++        const string data = "[{id: 1, addr: {city: 'x'}}, {id: 2}]";
++
++        Assert.Equal(
++            """[{"id":1,"addr":{"city":"x"}}]""",
++            Run($"$source({data}).$filter(addr.city eq 'x')"));
++
++        Assert.Equal(
++            """[{"id":2}]""",
++            Run($"$source({data}).$filter(addr.city eq null)"));
++    }
++}
+diff --git a/tests/FunQuery.Tests/NullAndBooleanLiteralTests.cs b/tests/FunQuery.Tests/NullAndBooleanLiteralTests.cs
+index e30b672..f11a9a7 100644
+--- a/tests/FunQuery.Tests/NullAndBooleanLiteralTests.cs
++++ b/tests/FunQuery.Tests/NullAndBooleanLiteralTests.cs
+@@ -106,8 +106,8 @@ public class NullAndBooleanLiteralTests
+     [Theory]
+     [InlineData("1, 'a', null")]
+     [InlineData("null, 1, 'a'")]
+-    [InlineData("{id: 1, name: 'a'}, {id: null}")]
+     [InlineData("{id: 1}, {id: 'x'}")]
++    [InlineData("{id: 1, name: 'a'}, {id: 'x', name: null}")]
+     [InlineData("[1], ['a']")]
+     public void Null_DoesNotMakeIncompatibleElementsCompatible(string elements)
+     {
+diff --git a/tests/FunQuery.Tests/SemanticAnalyzerTests.cs b/tests/FunQuery.Tests/SemanticAnalyzerTests.cs
+index 1c32997..91a198a 100644
+--- a/tests/FunQuery.Tests/SemanticAnalyzerTests.cs
++++ b/tests/FunQuery.Tests/SemanticAnalyzerTests.cs
+@@ -98,11 +98,27 @@ public class SemanticAnalyzerTests
+     }
+ 
+     [Fact]
+-    public void ArrayOfObjectsWithDifferentFields_IsRejected()
++    public void ArrayOfObjectsWithDifferentFields_NowUnifiesIntoTheUnionOfBothFieldSets()
++    {
++        // Heterogeneous objects unify (docs/DataTypes.md#objects): a field missing from one
++        // side simply reads as null on rows that lack it. Only a genuine type conflict on a
++        // field present on both sides is rejected (see ArrayOfObjectsWithConflictingFieldType).
++        var result = QueryPipeline.Analyze("$source([{id: 1}, {name: 'x'}])");
++
++        var array = Assert.IsType<ArrayType>(result.SemanticType);
++        var element = Assert.IsType<ObjectType>(array.Type);
++
++        Assert.Equal(2, element.Fields.Count);
++        Assert.Equal("int", element.Fields["id"].Name);
++        Assert.Equal("string", element.Fields["name"].Name);
++    }
++
++    [Fact]
++    public void ArrayOfObjectsWithConflictingFieldType_IsStillRejected()
+     {
+         AssertFails(
+             QueryErrorCode.IncompatibleElementTypes,
+-            "$source([{id: 1}, {name: 'x'}])");
++            "$source([{id: 1}, {id: 'x'}])");
+     }
+ 
+     [Fact]

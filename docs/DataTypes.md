@@ -69,8 +69,11 @@ Examples: `2147483647` is `int`, `2147483648` is `long`, `9223372036854775807` i
 both sides were `decimal`, which is lossless for all three types. `1.0 eq 1` is true. The scale of a
 decimal (the number of trailing zeros) has no effect.
 
-This applies to comparison only. Elements of an array must currently have the same type (see
-[Arrays](#arrays)).
+The same widening applies inside an array or an object field: `[1, 1.5]` is `array<decimal>`, and
+`{n: 1}` unified with `{n: 1.5}` gives a field of type `decimal`. Widening only ever happens within the
+same numeric family — `int`/`long`/`decimal` widen among themselves, and (separately) `float`/`double`
+widen among themselves — never across the two families, since mixing an exact and an approximate number
+silently would reintroduce the precision problem [floating point](#floating-point) exists to avoid.
 
 ## Floating point
 
@@ -136,10 +139,11 @@ SQL uses three-valued logic. A SQL provider must translate to the two-valued beh
 ## Arrays
 
 * Written `[a, b, c]`. Trailing commas are rejected. `[]` is allowed.
-* All elements must currently have the same type. `[1, 'a']` is `INCOMPATIBLE_ELEMENT_TYPES`, and so is
-  `[1, 1.5]`, because the element types `int` and `decimal` differ. Numeric widening and heterogeneous
-  arrays arrive in Milestone 3. `null` is the exception: it unifies with any element type (see
-  [Null](#null)). An empty array unifies with any array, so `[[], [1]]` is an array of `array<int>`.
+* Elements must have a common type: `[1, 'a']` is `INCOMPATIBLE_ELEMENT_TYPES` (a number and a string never
+  unify), but `[1, 1.5]` is `array<decimal>` (numbers of different types widen, see [Numbers](#numbers)),
+  and objects with different field sets unify into their union (see [Objects](#objects)). `null` also
+  unifies with any element type (see [Null](#null)). An empty array unifies with any array, so `[[], [1]]`
+  is an array of `array<int>`.
 * An array is a value, but it cannot be compared with any operator (see [`Operators.md`](Operators.md)).
 
 ## Objects
@@ -151,10 +155,12 @@ SQL uses three-valued logic. A SQL provider must translate to the two-valued beh
   'in': 1}`. A quoted key names the same field as the unquoted identifier, so `{'id': 1}` has the field `id`
   and `{'a': 1, a: 2}` is a duplicate. Field names are case-sensitive.
 * Duplicate names in one object are rejected (`DUPLICATE_FIELD`).
-* In an array of objects, every object must currently have the same set of fields with compatible types.
-  Field order does not matter. Numeric widening and sources with genuinely missing fields (a field present
-  in some rows but absent in others) are still open, tracked as the remaining part of Milestone 3.
+* In an array of objects, every object's fields are unified into their union: a field present in some
+  objects but not others is simply absent from the rows that lack it, and reads as `null` there (see
+  [Null](#null)). Only a field present on **both** sides with genuinely incompatible types fails, with
+  `INCOMPATIBLE_ELEMENT_TYPES`. Field order never matters.
 * An object cannot be compared with any operator.
+* A nested object field, on rows where it is present, works exactly as if every row had it.
 * A nested object field can be reached with a dotted path (`address.city`), specified in
   [`FieldAccess.md`](FieldAccess.md), which also specifies `~`, the current element.
 

@@ -50,6 +50,50 @@ internal static class CoreInMemoryFunctions
         return targetFn;
     }
 
+    /// <summary>
+    /// $field(name) atau $field(@variable): membaca field dari elemen saat ini lewat path
+    /// bertitik (mis. "address.city"). Path diketahui sekali di sini (baik dari literal
+    /// maupun dari nilai variable yang sudah terikat), lalu dipakai sebagai segmen tetap
+    /// untuk setiap baris. Field atau segmen yang hilang dibaca sebagai null, sama seperti
+    /// FieldAccessExpression biasa. Lihat docs/FieldAccess.md.
+    /// </summary>
+    public static Func<object?, object?> Field(InMemoryCompiler compiler, CallExpression call)
+    {
+        var argument = call.Arguments[0];
+
+        var path = argument switch
+        {
+            ValueExpression value => compiler.GetStringLiteralValue(value),
+
+            VariableExpression variable =>
+                compiler.ResolveVariable(compiler.GetVariableName(variable)) as string
+                ?? throw new QueryException(
+                    QueryErrorCode.InvalidFieldArgument,
+                    "The variable given to '$field' must resolve to a string field name or path.",
+                    variable.Span),
+
+            _ => throw new QueryException(
+                QueryErrorCode.InternalError,
+                "$field's argument must be a string literal or a variable."),
+        };
+
+        var segments = path.Split('.');
+
+        return element =>
+        {
+            object? current = element;
+
+            foreach (var segment in segments)
+            {
+                current = current is ObjectValue row && row.TryGetValue(segment, out var value)
+                    ? value
+                    : null;
+            }
+
+            return current;
+        };
+    }
+
     /// <summary>$filter(predicate): menyaring elemen. Predikat dihitung terhadap tiap elemen.</summary>
     public static Func<object?, object?> Filter(InMemoryCompiler compiler, CallExpression call)
     {

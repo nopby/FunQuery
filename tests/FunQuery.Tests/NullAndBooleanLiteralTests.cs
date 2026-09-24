@@ -106,8 +106,8 @@ public class NullAndBooleanLiteralTests
     [Theory]
     [InlineData("1, 'a', null")]
     [InlineData("null, 1, 'a'")]
-    [InlineData("{id: 1, name: 'a'}, {id: null}")]
     [InlineData("{id: 1}, {id: 'x'}")]
+    [InlineData("{id: 1, name: 'a'}, {id: 'x', name: null}")]
     [InlineData("[1], ['a']")]
     public void Null_DoesNotMakeIncompatibleElementsCompatible(string elements)
     {

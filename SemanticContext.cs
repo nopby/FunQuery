@@ -81,6 +81,10 @@ public sealed class SemanticContext
     public string GetFieldAccessName(FieldAccessExpression expression) =>
         GetText(expression.Field);
 
+    /// <summary>Isi sebuah string literal (tanpa tanda kutip, '' sudah di-unescape).</summary>
+    public string GetStringLiteralValue(ValueExpression expression) =>
+        StringLiteral.Unquote(_source.Span[expression.Token.StartPosition..expression.Token.EndPosition]);
+
     // ------------------------------------------------------------------
     // Variable (@nama)
     // ------------------------------------------------------------------
@@ -211,15 +215,15 @@ public sealed class SemanticContext
 
             if (unified is null)
             {
-                var message = elementTypeSoFar is ObjectType && elementType is ObjectType
-                    ? $"Array element at index {i} has different fields than the first element."
-                    : $"Array elements must have compatible types. " +
-                      $"Expected {elementTypeSoFar.Name}, " +
-                      $"got {elementType.Name} at index {i}.";
-
+                // Field yang hanya ada di sebagian elemen tidak lagi jadi alasan gagal (lihat
+                // Unify), jadi kegagalan di sini selalu berarti ada field yang sama namanya
+                // tapi tipenya benar-benar tidak sejalan (atau tipe elemen yang sama sekali
+                // beda keluarga, mis. int dan string).
                 throw new QueryException(
                     QueryErrorCode.IncompatibleElementTypes,
-                    message,
+                    $"Array elements must have compatible types. " +
+                    $"Expected {elementTypeSoFar.Name}, " +
+                    $"got {elementType.Name} at index {i}.",
                     expression.Elements[i].Span);
             }
 
@@ -308,6 +312,11 @@ public sealed class SemanticContext
         if (right is NullType)
             return left;
 
+        var widened = WidenNumeric(left, right);
+
+        if (widened is not null)
+            return widened;
+
         if (left is ArrayType la && right is ArrayType ra)
         {
             // Array kosong (element Unknown) menyatu dengan array apa pun.
@@ -323,25 +332,29 @@ public sealed class SemanticContext
         }
 
         // ObjectType berisi dictionary sehingga equality bawaan record
-        // membandingkan referensi. Gabungkan secara struktural.
+        // membandingkan referensi. Gabungkan secara struktural, sebagai UNION field, bukan
+        // irisan: field yang hanya ada di salah satu sisi tetap ikut (dibaca null pada baris
+        // yang tidak memilikinya, lihat docs/DataTypes.md#objects). Hanya field yang ADA di
+        // kedua sisi dan tipenya benar-benar tidak sejalan yang membuat unify gagal.
         if (left is ObjectType lo && right is ObjectType ro)
         {
-            if (lo.Fields.Count != ro.Fields.Count)
-                return null;
+            var fields = new Dictionary<string, SemanticType>(
+                Math.Max(lo.Fields.Count, ro.Fields.Count),
+                StringComparer.Ordinal);
 
-            var fields = new Dictionary<string, SemanticType>(lo.Fields.Count);
-
-            foreach (var field in lo.Fields)
+            foreach (var key in lo.Fields.Keys.Union(ro.Fields.Keys, StringComparer.Ordinal))
             {
-                if (!ro.Fields.TryGetValue(field.Key, out var other))
-                    return null;
+                var hasLeft = lo.Fields.TryGetValue(key, out var leftFieldType);
+                var hasRight = ro.Fields.TryGetValue(key, out var rightFieldType);
 
-                var merged = Unify(field.Value, other);
+                SemanticType? merged = hasLeft && hasRight
+                    ? Unify(leftFieldType!, rightFieldType!)
+                    : hasLeft ? leftFieldType : rightFieldType;
 
                 if (merged is null)
                     return null;
 
-                fields[field.Key] = merged;
+                fields[key] = merged;
             }
 
             return new ObjectType(fields);
@@ -349,6 +362,41 @@ public sealed class SemanticContext
 
         return null;
     }
+
+    /// <summary>
+    /// Melebarkan dua tipe angka ke tipe yang lebih luas (int &lt; long &lt; decimal, dan
+    /// terpisah float &lt; double), atau null bila keduanya bukan pasangan angka yang sama
+    /// keluarganya (exact atau approximate). Lihat docs/DataTypes.md#numbers.
+    /// </summary>
+    private static SemanticType? WidenNumeric(SemanticType left, SemanticType right)
+    {
+        var exactLeft = Array.IndexOf(ExactNumericOrder, left);
+        var exactRight = Array.IndexOf(ExactNumericOrder, right);
+
+        if (exactLeft >= 0 && exactRight >= 0)
+            return ExactNumericOrder[Math.Max(exactLeft, exactRight)];
+
+        var approximateLeft = Array.IndexOf(ApproximateNumericOrder, left);
+        var approximateRight = Array.IndexOf(ApproximateNumericOrder, right);
+
+        if (approximateLeft >= 0 && approximateRight >= 0)
+            return ApproximateNumericOrder[Math.Max(approximateLeft, approximateRight)];
+
+        return null;
+    }
+
+    private static readonly SemanticType[] ExactNumericOrder =
+    [
+        SemanticTypeOptions.Int,
+        SemanticTypeOptions.Long,
+        SemanticTypeOptions.Decimal,
+    ];
+
+    private static readonly SemanticType[] ApproximateNumericOrder =
+    [
+        SemanticTypeOptions.Float,
+        SemanticTypeOptions.Double,
+    ];
 
     /// <summary>
     /// Nilai tunggal yang boleh dibandingkan: angka, string, dan bool.

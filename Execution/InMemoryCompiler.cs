@@ -89,6 +89,9 @@ public sealed class InMemoryCompiler
     private string TextOf(Token token) =>
         _source.Span[token.StartPosition..token.EndPosition].ToString();
 
+    internal string GetStringLiteralValue(ValueExpression expression) =>
+        StringLiteral.Unquote(_source.Span[expression.Token.StartPosition..expression.Token.EndPosition]);
+
     private Func<object?, object?> CompileValue(ValueExpression expression)
     {
         object? constant;
