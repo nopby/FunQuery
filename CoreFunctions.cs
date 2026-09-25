@@ -51,5 +51,35 @@ public sealed class CoreFunctions : IQueryExtension
             AcceptsTarget = t => t is ArrayType,
             ReturnType = target => target ?? SemanticTypeOptions.Unknown,
         });
+
+        registry.Add(new FunctionDefinition
+        {
+            // $select(id, name) atau $select({...}): dianalisis secara khusus (lihat
+            // SemanticAnalyzer.AnalyzeSelect), karena nama key hasilnya harus diambil dari
+            // AST argumen (nama field), bukan hanya dari tipenya. Aturan target (wajib array)
+            // tetap divalidasi generik lewat TargetRule di sini.
+            Name = "$select",
+            Parameters = [],
+            TargetRule = TargetRule.Required,
+            AcceptsTarget = t => t is ArrayType,
+        });
+
+        registry.Add(new FunctionDefinition
+        {
+            Name = "$map",
+            Parameters =
+            [
+                new ParameterDefinition
+                {
+                    Name = "expression",
+                    Expected = "any",
+                    Accepts = static _ => true,
+                },
+            ],
+            TargetRule = TargetRule.Required,
+            UsesElementScope = true,
+            AcceptsTarget = t => t is ArrayType,
+            ReturnTypeFromArguments = (_, args) => new ArrayType(args[0]),
+        });
     }
 }

@@ -39,11 +39,13 @@ public sealed class InMemoryFunctions
     public bool TryGet(string name, [NotNullWhen(true)] out InMemoryFunction? implementation) =>
         _functions.TryGetValue(name, out implementation);
 
-    /// <summary>Implementasi function inti: $source dan $filter.</summary>
+    /// <summary>Implementasi function inti: $source, $let, $field, $filter, $select, $map.</summary>
     public static InMemoryFunctions CreateDefault() =>
         new InMemoryFunctions()
             .Add("$source", CoreInMemoryFunctions.Source)
             .Add("$let", CoreInMemoryFunctions.Let)
             .Add("$field", CoreInMemoryFunctions.Field)
-            .Add("$filter", CoreInMemoryFunctions.Filter);
+            .Add("$filter", CoreInMemoryFunctions.Filter)
+            .Add("$select", CoreInMemoryFunctions.Select)
+            .Add("$map", CoreInMemoryFunctions.Map);
 }

@@ -45,6 +45,19 @@ public sealed class InMemoryCompiler
     internal string GetVariableName(VariableExpression expression) =>
         TextOf(expression.Token)[1..];
 
+    /// <summary>Key untuk bentuk daftar $select: nama field polos, atau segmen terakhir path.</summary>
+    internal string GetSelectKey(BaseExpression expression) =>
+        expression switch
+        {
+            IdentifierExpression identifier => TextOf(identifier.Token),
+            FieldAccessExpression access => TextOf(access.Field),
+            _ => throw new QueryException(
+                QueryErrorCode.InternalError,
+                "$select's list-form argument is not a field reference; " +
+                "the analyzer should have rejected this.",
+                expression.Span),
+        };
+
     internal object? ResolveVariable(string name) =>
         _variables.TryGetValue(name, out var value)
             ? value

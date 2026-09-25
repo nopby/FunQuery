@@ -93,7 +93,7 @@ public class AdversarialInputTests
     private static readonly string[] Fragments =
     [
         "$source", "$filter", "$x", "(", ")", "[", "]", "{", "}", ",", ":", ".", " ",
-        "id", "name", "eq", "neq", "gt", "and", "or", "1", "2.5", "007", "'x'", "'", "#", "\"", "true", "false", "null", "not", "in", "contains", "startswith", "endswith", "-1", "-", "''", "-2.5", "@x", "@", "$let", "~", "$field",
+        "id", "name", "eq", "neq", "gt", "and", "or", "1", "2.5", "007", "'x'", "'", "#", "\"", "true", "false", "null", "not", "in", "contains", "startswith", "endswith", "-1", "-", "''", "-2.5", "@x", "@", "$let", "~", "$field", "$select", "$map",
     ];
 
     private static readonly string[] ValidQueries =
@@ -110,6 +110,9 @@ public class AdversarialInputTests
         "$source([{a: {b: {c: 1}}}]).$filter(a.b.c eq 1 or ~.a.b.c neq 1)",
         "$source([{id: 1}, {name: 'x'}]).$filter($field('id') eq 1 or name eq 'x')",
         "$let(@col, 'a.b').$source([{a: {b: 1}}, {a: {b: 2.5}}]).$filter($field(@col) gt 1)",
+        "$source([{id: 1, name: 'a'}, {id: 2, name: 'b'}]).$select(id, name).$filter(id eq 1)",
+        "$source([1, 2, 3]).$map(~ gt 1).$filter(~)",
+        "$source([{id: 1, addr: {city: 'x'}}]).$select({id: id, city: addr.city, tag: $field('id')})",
     ];
 
     private static readonly QueryEngine Engine = new();

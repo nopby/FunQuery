@@ -490,6 +490,9 @@ public static class SemanticAnalyzer
         if (functionName == "$field")
             return AnalyzeField(expression, context);
 
+        if (functionName == "$select")
+            return AnalyzeSelect(expression, context);
+
         var targetType = expression.Target?.SemanticType;
 
         // 4. Analyze argumen (di dalam scope field elemen kalau fungsi membutuhkannya)
@@ -722,6 +725,66 @@ public static class SemanticAnalyzer
                 expression.Span);
 
         return SemanticTypeOptions.AnyType;
+    }
+
+    /// <summary>
+    /// $select(id, name) atau $select({...}): proyeksi ke array of object. Bentuk daftar
+    /// mengambil key dari segmen terakhir nama field; bentuk object membiarkan pengguna
+    /// menentukan key dan nilai sendiri lewat literal object biasa. Lihat docs/Functions.md.
+    /// </summary>
+    private static CallExpression AnalyzeSelect(CallExpression expression, SemanticContext context)
+    {
+        // ValidateTarget (dipanggil sebelum ini) sudah memastikan Target ada dan bertipe array.
+        var array = (ArrayType)expression.Target!.SemanticType!;
+
+        if (expression.Arguments.Count == 0)
+            throw new QueryException(
+                QueryErrorCode.InvalidArgumentCount,
+                "Function '$select' requires at least 1 argument.",
+                expression.Function);
+
+        using (context.EnterScope(array.Type))
+        {
+            // Bentuk object: satu argumen berupa literal object, mis. $select({id: id, n: name}).
+            if (expression.Arguments is [BlockExpression block])
+            {
+                Analyze(block, context);
+                expression.SemanticType = new ArrayType(block.SemanticType!);
+
+                return expression;
+            }
+
+            // Bentuk daftar: setiap argumen harus field polos atau path (bukan ~, $field,
+            // atau ekspresi bebas), karena key hasilnya diambil dari nama field itu sendiri.
+            var fields = new Dictionary<string, SemanticType>(StringComparer.Ordinal);
+
+            foreach (var argument in expression.Arguments)
+            {
+                Analyze(argument, context);
+
+                var key = argument switch
+                {
+                    IdentifierExpression identifier => context.GetIdentifierName(identifier),
+                    FieldAccessExpression access => context.GetFieldAccessName(access),
+                    _ => throw new QueryException(
+                        QueryErrorCode.InvalidSelectArgument,
+                        "Each argument of '$select' must be a plain field, e.g. id or " +
+                        "address.city. Use $select({...}) to rename fields or compute values.",
+                        argument.Span),
+                };
+
+                if (!fields.TryAdd(key, argument.SemanticType!))
+                    throw new QueryException(
+                        QueryErrorCode.DuplicateField,
+                        $"Duplicate field '{key}' in $select. " +
+                        "Use $select({...}) to give it a different name.",
+                        argument.Span);
+            }
+
+            expression.SemanticType = new ArrayType(new ObjectType(fields));
+
+            return expression;
+        }
     }
 
     private static VariableExpression AnalyzeVariable(

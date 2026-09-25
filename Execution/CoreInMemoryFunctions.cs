@@ -121,4 +121,75 @@ internal static class CoreInMemoryFunctions
                 yield return item;
         }
     }
+
+    /// <summary>$map(expression): memproyeksikan setiap elemen lewat satu ekspresi.</summary>
+    public static Func<object?, object?> Map(InMemoryCompiler compiler, CallExpression call)
+    {
+        var target = compiler.Compile(
+            call.Target
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
+                "$map has no target.",
+                call.Function));
+
+        var projector = compiler.Compile(call.Arguments[0]);
+
+        return element => Project(target(element) as IEnumerable<object?> ?? [], projector);
+    }
+
+    /// <summary>
+    /// $select(id, name) atau $select({...}): sama seperti $map, bedanya proyektor dibangun
+    /// dari nama field (bentuk daftar) atau dari literal object (bentuk object) yang sudah
+    /// dianalisis sebelumnya. Lihat SemanticAnalyzer.AnalyzeSelect.
+    /// </summary>
+    public static Func<object?, object?> Select(InMemoryCompiler compiler, CallExpression call)
+    {
+        var target = compiler.Compile(
+            call.Target
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
+                "$select has no target.",
+                call.Function));
+
+        var projector = call.Arguments is [BlockExpression]
+            ? compiler.Compile(call.Arguments[0])
+            : CompileFieldList(compiler, call.Arguments);
+
+        return element => Project(target(element) as IEnumerable<object?> ?? [], projector);
+    }
+
+    private static Func<object?, object?> CompileFieldList(
+        InMemoryCompiler compiler,
+        IReadOnlyList<BaseExpression> arguments)
+    {
+        var keys = new string[arguments.Count];
+        var values = new Func<object?, object?>[arguments.Count];
+
+        for (int i = 0; i < arguments.Count; i++)
+        {
+            keys[i] = compiler.GetSelectKey(arguments[i]);
+            values[i] = compiler.Compile(arguments[i]);
+        }
+
+        var shape = new ObjectShape(keys);
+
+        return item =>
+        {
+            var row = new object?[values.Length];
+
+            for (int i = 0; i < row.Length; i++)
+                row[i] = values[i](item);
+
+            return new ObjectValue(shape, row);
+        };
+    }
+
+    /// <summary>Menerapkan sebuah proyektor ke tiap elemen sekuens, dipakai $map dan $select.</summary>
+    private static IEnumerable<object?> Project(
+        IEnumerable<object?> items,
+        Func<object?, object?> projector)
+    {
+        foreach (var item in items)
+            yield return projector(item);
+    }
 }
