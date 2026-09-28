@@ -58,6 +58,15 @@ public sealed class InMemoryCompiler
                 expression.Span),
         };
 
+    /// <summary>Teks mentah sebuah IdentifierExpression, mis. kata kunci asc/desc di $sort.</summary>
+    internal string GetIdentifierText(BaseExpression expression) =>
+        expression is IdentifierExpression identifier
+            ? TextOf(identifier.Token)
+            : throw new QueryException(
+                QueryErrorCode.InternalError,
+                "Expected an identifier; the analyzer should have rejected this.",
+                expression.Span);
+
     internal object? ResolveVariable(string name) =>
         _variables.TryGetValue(name, out var value)
             ? value

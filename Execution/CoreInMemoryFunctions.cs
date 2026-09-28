@@ -192,4 +192,114 @@ internal static class CoreInMemoryFunctions
         foreach (var item in items)
             yield return projector(item);
     }
+
+    /// <summary>
+    /// $sort(key) atau $sort(key, asc|desc): mengurutkan berdasarkan satu key per elemen.
+    /// null selalu dianggap paling kecil (asc: di awal, desc: di akhir). Index elemen asli
+    /// dijadikan pemutus akhir, sehingga perbandingan tidak pernah menghasilkan "sama" dan
+    /// hasilnya selalu stabil (elemen dengan key sama tetap dalam urutan asalnya) walau
+    /// Array.Sort sendiri tidak menjamin stabilitas untuk perbandingan yang benar-benar seri.
+    /// </summary>
+    public static Func<object?, object?> Sort(InMemoryCompiler compiler, CallExpression call)
+    {
+        var target = compiler.Compile(
+            call.Target
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
+                "$sort has no target.",
+                call.Function));
+
+        var key = compiler.Compile(call.Arguments[0]);
+
+        var descending = call.Arguments.Count == 2 &&
+            compiler.GetIdentifierText(call.Arguments[1]) == "desc";
+
+        return element =>
+        {
+            var items = (target(element) as IEnumerable<object?> ?? []).ToList();
+            var entries = new (object? Item, bool IsNull, object? Value, int Index)[items.Count];
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                var value = key(items[i]);
+                entries[i] = (items[i], value is null, value, i);
+            }
+
+            Array.Sort(entries, (a, b) => CompareSortKeys(a, b, descending));
+
+            var result = new List<object?>(entries.Length);
+
+            foreach (var entry in entries)
+                result.Add(entry.Item);
+
+            return result;
+        };
+    }
+
+    private static int CompareSortKeys(
+        (object? Item, bool IsNull, object? Value, int Index) x,
+        (object? Item, bool IsNull, object? Value, int Index) y,
+        bool descending)
+    {
+        if (x.IsNull != y.IsNull)
+        {
+            var nullFirst = x.IsNull ? -1 : 1;
+            return descending ? -nullFirst : nullFirst;
+        }
+
+        if (!x.IsNull && ValueOperations.TryCompare(x.Value, y.Value, out var comparison) &&
+            comparison != 0)
+        {
+            return descending ? -comparison : comparison;
+        }
+
+        // Pemutus akhir: index asli, selalu menaik terlepas dari arah, supaya hasil stabil.
+        return x.Index.CompareTo(y.Index);
+    }
+
+    /// <summary>$take(count): mengambil sejumlah elemen pertama. Sejalan dengan LINQ, count
+    /// negatif memberi sekuens kosong.</summary>
+    public static Func<object?, object?> Take(InMemoryCompiler compiler, CallExpression call)
+    {
+        var target = compiler.Compile(
+            call.Target
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
+                "$take has no target.",
+                call.Function));
+
+        var count = compiler.Compile(call.Arguments[0]);
+
+        return element => (target(element) as IEnumerable<object?> ?? [])
+            .Take(ToInt32(count(element)))
+            .ToList();
+    }
+
+    /// <summary>$skip(count): melewati sejumlah elemen pertama. Sejalan dengan LINQ, count
+    /// negatif sama dengan tidak melewati apa pun.</summary>
+    public static Func<object?, object?> Skip(InMemoryCompiler compiler, CallExpression call)
+    {
+        var target = compiler.Compile(
+            call.Target
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
+                "$skip has no target.",
+                call.Function));
+
+        var count = compiler.Compile(call.Arguments[0]);
+
+        return element => (target(element) as IEnumerable<object?> ?? [])
+            .Skip(ToInt32(count(element)))
+            .ToList();
+    }
+
+    private static int ToInt32(object? value) =>
+        value switch
+        {
+            int i => i,
+            long l => l > int.MaxValue ? int.MaxValue : l < int.MinValue ? int.MinValue : (int)l,
+            _ => throw new QueryException(
+                QueryErrorCode.InternalError,
+                "$take/$skip's count did not evaluate to int or long."),
+        };
 }

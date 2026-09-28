@@ -81,5 +81,40 @@ public sealed class CoreFunctions : IQueryExtension
             AcceptsTarget = t => t is ArrayType,
             ReturnTypeFromArguments = (_, args) => new ArrayType(args[0]),
         });
+        registry.Add(new FunctionDefinition
+        {
+            // $sort(key) atau $sort(key, asc|desc): dianalisis secara khusus (lihat
+            // SemanticAnalyzer.AnalyzeSort), karena argumen arah bukan ekspresi yang
+            // dievaluasi (bukan field, bukan variable), melainkan kata kunci literal.
+            Name = "$sort",
+            Parameters = [],
+            TargetRule = TargetRule.Required,
+            AcceptsTarget = t => t is ArrayType,
+        });
+
+        registry.Add(new FunctionDefinition
+        {
+            Name = "$take",
+            Parameters = [CountParameter],
+            TargetRule = TargetRule.Required,
+            AcceptsTarget = t => t is ArrayType,
+            ReturnType = target => target ?? SemanticTypeOptions.Unknown,
+        });
+
+        registry.Add(new FunctionDefinition
+        {
+            Name = "$skip",
+            Parameters = [CountParameter],
+            TargetRule = TargetRule.Required,
+            AcceptsTarget = t => t is ArrayType,
+            ReturnType = target => target ?? SemanticTypeOptions.Unknown,
+        });
     }
+
+    private static readonly ParameterDefinition CountParameter = new()
+    {
+        Name = "count",
+        Expected = "int or long",
+        Accepts = static type => type is IntType or LongType,
+    };
 }

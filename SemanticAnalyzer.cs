@@ -493,6 +493,9 @@ public static class SemanticAnalyzer
         if (functionName == "$select")
             return AnalyzeSelect(expression, context);
 
+        if (functionName == "$sort")
+            return AnalyzeSort(expression, context);
+
         var targetType = expression.Target?.SemanticType;
 
         // 4. Analyze argumen (di dalam scope field elemen kalau fungsi membutuhkannya)
@@ -785,6 +788,67 @@ public static class SemanticAnalyzer
 
             return expression;
         }
+    }
+
+    /// <summary>
+    /// $sort(key) atau $sort(key, asc|desc): mengurutkan berdasarkan satu key per elemen.
+    /// asc/desc bukan ekspresi (bukan field, bukan reserved word global), melainkan kata
+    /// kunci literal khusus di posisi argumen ini. Lihat docs/Functions.md.
+    /// </summary>
+    private static CallExpression AnalyzeSort(CallExpression expression, SemanticContext context)
+    {
+        // ValidateTarget (dipanggil sebelum ini) sudah memastikan Target ada dan bertipe array.
+        var array = (ArrayType)expression.Target!.SemanticType!;
+
+        if (expression.Arguments.Count is 0 or > 2)
+            throw new QueryException(
+                QueryErrorCode.InvalidArgumentCount,
+                "Function '$sort' requires 1 or 2 arguments: $sort(key) or $sort(key, asc|desc).",
+                expression.Function);
+
+        using (context.EnterScope(array.Type))
+        {
+            var key = expression.Arguments[0];
+
+            Analyze(key, context);
+
+            var keyType =
+                key.SemanticType
+                ?? throw new QueryException(
+                    QueryErrorCode.InternalError,
+                    "$sort's key has no semantic type.");
+
+            if (keyType is not (StringType or AnyType) && !SemanticContext.IsNumeric(keyType))
+            {
+                throw new QueryException(
+                    QueryErrorCode.TypeMismatch,
+                    $"Function '$sort' requires a number or string key, got {keyType.Name}.",
+                    key.Span);
+            }
+        }
+
+        if (expression.Arguments.Count == 2)
+        {
+            var direction = expression.Arguments[1];
+
+            if (direction is not IdentifierExpression identifier)
+                throw new QueryException(
+                    QueryErrorCode.InvalidSortDirection,
+                    "The second argument of '$sort' must be the keyword asc or desc.",
+                    direction.Span);
+
+            var word = context.GetIdentifierName(identifier);
+
+            if (word is not ("asc" or "desc"))
+                throw new QueryException(
+                    QueryErrorCode.InvalidSortDirection,
+                    $"'{word}' is not a valid sort direction. Use asc or desc.",
+                    direction.Span);
+        }
+
+        expression.SemanticType = expression.Target.SemanticType;
+
+        return expression;
     }
 
     private static VariableExpression AnalyzeVariable(

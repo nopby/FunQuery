@@ -100,3 +100,56 @@ Both functions return ordinary arrays and compose with everything else: `$filter
 ```
 $source([{id: 1}, {id: 2}]).$select(id).$filter(id eq 1)   -- [{"id": 1}]
 ```
+
+## `$sort`
+
+**Name:** `$sort`
+**Arguments:** 1 or 2. The first is a key expression (any per-element expression: a field, a path, `~`,
+`$field(...)`). The second, optional, is the bare keyword `asc` or `desc` — not a string, not a variable,
+not an expression evaluated against the element.
+**Argument types:** the key must be `int`, `long`, `decimal`, `string`, or `any`. `bool`, `array`, and
+`object` are rejected (`TYPE_MISMATCH`), the same set `gt`/`lt` accept (see
+[`Operators.md`](Operators.md#comparison-operators)).
+**Return type:** the same array type as the target — sorting never changes the row shape.
+**Null behavior:** a `null` key always sorts as the smallest value, in both directions — ascending puts
+`null` first, descending puts it last. This is a definite, testable position, not an "undefined" one.
+**Collection behavior:** the sort is stable — elements whose key compares equal keep their original relative
+order — in both directions. Default direction is ascending when the second argument is omitted.
+**Error behavior:** `INVALID_ARGUMENT_COUNT` for anything other than 1 or 2 arguments. `INVALID_TARGET` if
+the target is not an array. `INVALID_SORT_DIRECTION` if the second argument is present but is not literally
+`asc` or `desc` (including a quoted `'desc'` or a variable).
+**Provider requirements:** translates to `ORDER BY` / LINQ `OrderBy`/`OrderByDescending`, with nulls placed
+using the provider's own `NULLS FIRST`/`NULLS LAST` (or equivalent) so that behavior matches exactly.
+
+```
+$source([{id: 3}, {id: 1}, {id: 2}]).$sort(id)             -- ascending by id
+$source([{id: 3}, {id: 1}, {id: 2}]).$sort(id, desc)       -- descending by id
+$source(['b', 'a', 'c']).$sort(~)                          -- scalar arrays sort too
+```
+
+Only one sort key is supported in v1. For a secondary tie-breaker, there is currently no way to express
+"then by" — this is a known limitation, not an oversight, and may be revisited in a later version.
+
+## `$take` and `$skip`
+
+**Name:** `$take` / `$skip`
+**Arguments:** one, unnamed — a count, evaluated once against the surrounding scope (not per element; it is
+not affected by `UsesElementScope`, so it cannot reference `~` or a field, only a literal or a variable).
+**Argument types:** `int` or `long`. A `decimal`, `string`, `bool`, or any other type is `TYPE_MISMATCH`.
+**Return type:** the same array type as the target.
+**Null behavior:** not applicable — the count itself is never `null` at the type level (no type unifies to
+allow it here); this is enforced the same way any other typed argument is.
+**Collection behavior:** `$take(n)` keeps the first `n` elements; `$skip(n)` discards the first `n` and keeps
+the rest. A negative `n` is treated as `0` for both — following `System.Linq`'s own `Take`/`Skip` behavior —
+so `$take(-1)` gives an empty array and `$skip(-1)` returns every element unchanged. A count larger than the
+array's length is clamped: `$take` returns everything, `$skip` returns nothing.
+**Error behavior:** `INVALID_TARGET` if the target is not an array.
+**Provider requirements:** translates to `OFFSET`/`FETCH` (or `LIMIT`/`OFFSET`) and LINQ `Take`/`Skip`. Both
+functions require a defined row order to be meaningful; a provider should require (or warn on) a `$sort`
+earlier in the chain when translating to a query language without a guaranteed default order, such as SQL.
+The in-memory provider does not enforce this, because its array order is always well-defined.
+
+```
+$source([{id: 1}, {id: 2}, {id: 3}]).$sort(id, desc).$take(2)   -- the two largest ids
+$let(@pageSize, 10).$source(...).$sort(id).$take(@pageSize)
+```
