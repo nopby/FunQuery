@@ -9,7 +9,7 @@ public class FunctionRegistryTests
     private static FunctionDefinition Definition(string name) =>
         new() { Name = name, Parameters = [] };
 
-    // A third-party extension: "$count" returns the number of elements of an array.
+    // A third-party extension: "$total" returns the number of elements of an array.
     private sealed class CountExtension : IQueryExtension
     {
         public string Name => "count-extension";
@@ -17,7 +17,7 @@ public class FunctionRegistryTests
         public void Register(FunctionRegistry registry) =>
             registry.Add(new FunctionDefinition
             {
-                Name = "$count",
+                Name = "$total",
                 Parameters = [],
                 TargetRule = TargetRule.Required,
                 AcceptsTarget = target => target is ArrayType,
@@ -166,7 +166,7 @@ public class FunctionRegistryTests
         var registry = QueryPipeline.CoreRegistry().AddExtension(new CountExtension());
 
         var result = QueryPipeline.Analyze(
-            "$source([{id: 1}, {id: 2}]).$count()",
+            "$source([{id: 1}, {id: 2}]).$total()",
             functions: registry);
 
         Assert.Equal(SemanticTypeOptions.Int, result.SemanticType);
@@ -179,7 +179,7 @@ public class FunctionRegistryTests
 
         QueryAssert.Fails(
             QueryErrorCode.InvalidTarget,
-            () => QueryPipeline.Analyze("$count()", functions: registry));
+            () => QueryPipeline.Analyze("$total()", functions: registry));
     }
 
     [Fact]
@@ -187,6 +187,6 @@ public class FunctionRegistryTests
     {
         QueryAssert.Fails(
             QueryErrorCode.UnknownFunction,
-            () => QueryPipeline.Analyze("$source([1]).$count()"));
+            () => QueryPipeline.Analyze("$source([1]).$total()"));
     }
 }

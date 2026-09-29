@@ -436,7 +436,7 @@ public class QueryEngineTests
         var functions = QueryPipeline.CoreRegistry();
         functions.Add(new FunctionDefinition
         {
-            Name = "$count",
+            Name = "$total",
             Parameters = [],
             TargetRule = TargetRule.Required,
             AcceptsTarget = t => t is ArrayType,
@@ -444,7 +444,7 @@ public class QueryEngineTests
         });
 
         var implementations = InMemoryFunctions.CreateDefault().Add(
-            "$count",
+            "$total",
             (compiler, call) =>
             {
                 var target = compiler.Compile(call.Target!);
@@ -453,7 +453,7 @@ public class QueryEngineTests
             });
 
         var engine = new QueryEngine(functions: functions, implementations: implementations);
-        var result = engine.Execute($"$source({Four}).$filter(id gt 1).$count()");
+        var result = engine.Execute($"$source({Four}).$filter(id gt 1).$total()");
 
         Assert.Equal("int", result.Type.Name);
         Assert.Equal(3, result.Value);

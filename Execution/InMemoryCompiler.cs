@@ -58,6 +58,8 @@ public sealed class InMemoryCompiler
                 expression.Span),
         };
 
+    internal string GetFunctionText(CallExpression call) => TextOf(call.Function);
+
     /// <summary>Teks mentah sebuah IdentifierExpression, mis. kata kunci asc/desc di $sort.</summary>
     internal string GetIdentifierText(BaseExpression expression) =>
         expression is IdentifierExpression identifier

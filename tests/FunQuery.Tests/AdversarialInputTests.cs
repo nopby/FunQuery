@@ -93,7 +93,7 @@ public class AdversarialInputTests
     private static readonly string[] Fragments =
     [
         "$source", "$filter", "$x", "(", ")", "[", "]", "{", "}", ",", ":", ".", " ",
-        "id", "name", "eq", "neq", "gt", "and", "or", "1", "2.5", "007", "'x'", "'", "#", "\"", "true", "false", "null", "not", "in", "contains", "startswith", "endswith", "-1", "-", "''", "-2.5", "@x", "@", "$let", "~", "$field", "$select", "$map", "$sort", "$take", "$skip", "asc", "desc",
+        "id", "name", "eq", "neq", "gt", "and", "or", "1", "2.5", "007", "'x'", "'", "#", "\"", "true", "false", "null", "not", "in", "contains", "startswith", "endswith", "-1", "-", "''", "-2.5", "@x", "@", "$let", "~", "$field", "$select", "$map", "$sort", "$take", "$skip", "asc", "desc", "$count", "$any", "$first", "$distinct",
     ];
 
     private static readonly string[] ValidQueries =
@@ -115,6 +115,8 @@ public class AdversarialInputTests
         "$source([{id: 1, addr: {city: 'x'}}]).$select({id: id, city: addr.city, tag: $field('id')})",
         "$source([{id: 3}, {id: 1}, {id: 2}]).$sort(id, desc).$take(2).$skip(1)",
         "$let(@n, 2).$source([1, 2, 3]).$sort(~, desc).$take(@n).$skip(0)",
+        "$source([1, 2, 1, 3, 2]).$distinct().$sort(~, desc).$first()",
+        "$source([{id: 1}, {id: 2}]).$any(id eq 1) eq true",
     ];
 
     private static readonly QueryEngine Engine = new();

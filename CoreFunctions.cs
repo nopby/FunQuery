@@ -94,6 +94,54 @@ public sealed class CoreFunctions : IQueryExtension
 
         registry.Add(new FunctionDefinition
         {
+            Name = "$count",
+            Parameters = [],
+            TargetRule = TargetRule.Required,
+            AcceptsTarget = t => t is ArrayType,
+            ReturnType = _ => SemanticTypeOptions.Long,
+        });
+
+        registry.Add(new FunctionDefinition
+        {
+            Name = "$any",
+            Parameters = [ParameterDefinition.Of<BooleanType>("predicate", "bool", required: false)],
+            TargetRule = TargetRule.Required,
+            UsesElementScope = true,
+            AcceptsTarget = t => t is ArrayType,
+            ReturnType = _ => SemanticTypeOptions.Boolean,
+        });
+
+        registry.Add(new FunctionDefinition
+        {
+            Name = "$first",
+            Parameters = [ParameterDefinition.Of<BooleanType>("predicate", "bool", required: false)],
+            TargetRule = TargetRule.Required,
+            UsesElementScope = true,
+            AcceptsTarget = t => t is ArrayType,
+            ReturnType = target => target is ArrayType array ? array.Type : SemanticTypeOptions.Unknown,
+        });
+
+        registry.Add(new FunctionDefinition
+        {
+            Name = "$distinct",
+            Parameters =
+            [
+                new ParameterDefinition
+                {
+                    Name = "key",
+                    Expected = "any",
+                    Accepts = static _ => true,
+                    Required = false,
+                },
+            ],
+            TargetRule = TargetRule.Required,
+            UsesElementScope = true,
+            AcceptsTarget = t => t is ArrayType,
+            ReturnType = target => target ?? SemanticTypeOptions.Unknown,
+        });
+
+        registry.Add(new FunctionDefinition
+        {
             Name = "$take",
             Parameters = [CountParameter],
             TargetRule = TargetRule.Required,

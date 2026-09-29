@@ -293,6 +293,88 @@ internal static class CoreInMemoryFunctions
             .ToList();
     }
 
+    /// <summary>$count(): jumlah elemen sebagai long.</summary>
+    public static Func<object?, object?> Count(InMemoryCompiler compiler, CallExpression call)
+    {
+        var target = TargetOf(compiler, call);
+
+        return element => target(element) switch
+        {
+            IReadOnlyCollection<object?> collection => (long)collection.Count,
+            IEnumerable<object?> sequence => (long)sequence.Count(),
+            _ => 0L,
+        };
+    }
+
+    /// <summary>$any() atau $any(predicate): true bila ada elemen (yang memenuhi predikat).</summary>
+    public static Func<object?, object?> Any(InMemoryCompiler compiler, CallExpression call)
+    {
+        var target = TargetOf(compiler, call);
+        var predicate = call.Arguments.Count == 1 ? compiler.Compile(call.Arguments[0]) : null;
+
+        return element =>
+        {
+            foreach (var item in target(element) as IEnumerable<object?> ?? [])
+            {
+                if (predicate is null || ValueOperations.IsTrue(predicate(item)))
+                    return true;
+            }
+
+            return false;
+        };
+    }
+
+    /// <summary>$first() atau $first(predicate): elemen pertama (yang memenuhi predikat), atau null.</summary>
+    public static Func<object?, object?> First(InMemoryCompiler compiler, CallExpression call)
+    {
+        var target = TargetOf(compiler, call);
+        var predicate = call.Arguments.Count == 1 ? compiler.Compile(call.Arguments[0]) : null;
+
+        return element =>
+        {
+            foreach (var item in target(element) as IEnumerable<object?> ?? [])
+            {
+                if (predicate is null || ValueOperations.IsTrue(predicate(item)))
+                    return item;
+            }
+
+            return null;
+        };
+    }
+
+    /// <summary>
+    /// $distinct() atau $distinct(key): membuang duplikat, elemen pertama yang dipertahankan dan
+    /// urutan asal dijaga. Tanpa key, seluruh elemen dibandingkan secara struktural; dengan key,
+    /// hanya nilai key itu yang dibandingkan. Lihat ValueEqualityComparer.
+    /// </summary>
+    public static Func<object?, object?> Distinct(InMemoryCompiler compiler, CallExpression call)
+    {
+        var target = TargetOf(compiler, call);
+        var key = call.Arguments.Count == 1 ? compiler.Compile(call.Arguments[0]) : null;
+
+        return element =>
+        {
+            var seen = new HashSet<object?>(ValueEqualityComparer.Instance);
+            var result = new List<object?>();
+
+            foreach (var item in target(element) as IEnumerable<object?> ?? [])
+            {
+                if (seen.Add(key is null ? item : key(item)))
+                    result.Add(item);
+            }
+
+            return result;
+        };
+    }
+
+    private static Func<object?, object?> TargetOf(InMemoryCompiler compiler, CallExpression call) =>
+        compiler.Compile(
+            call.Target
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
+                $"{compiler.GetFunctionText(call)} has no target.",
+                call.Function));
+
     private static int ToInt32(object? value) =>
         value switch
         {

@@ -39,7 +39,7 @@ public sealed class InMemoryFunctions
     public bool TryGet(string name, [NotNullWhen(true)] out InMemoryFunction? implementation) =>
         _functions.TryGetValue(name, out implementation);
 
-    /// <summary>Implementasi function inti: $source, $let, $field, $filter, $select, $map, $sort, $take, $skip.</summary>
+    /// <summary>Implementasi function inti: $source, $let, $field, $filter, $select, $map, $sort, $take, $skip, $count, $any, $first, $distinct.</summary>
     public static InMemoryFunctions CreateDefault() =>
         new InMemoryFunctions()
             .Add("$source", CoreInMemoryFunctions.Source)
@@ -50,5 +50,9 @@ public sealed class InMemoryFunctions
             .Add("$map", CoreInMemoryFunctions.Map)
             .Add("$sort", CoreInMemoryFunctions.Sort)
             .Add("$take", CoreInMemoryFunctions.Take)
-            .Add("$skip", CoreInMemoryFunctions.Skip);
+            .Add("$skip", CoreInMemoryFunctions.Skip)
+            .Add("$count", CoreInMemoryFunctions.Count)
+            .Add("$any", CoreInMemoryFunctions.Any)
+            .Add("$first", CoreInMemoryFunctions.First)
+            .Add("$distinct", CoreInMemoryFunctions.Distinct);
 }

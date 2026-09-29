@@ -153,3 +153,90 @@ The in-memory provider does not enforce this, because its array order is always 
 $source([{id: 1}, {id: 2}, {id: 3}]).$sort(id, desc).$take(2)   -- the two largest ids
 $let(@pageSize, 10).$source(...).$sort(id).$take(@pageSize)
 ```
+
+## `$count`
+
+**Name:** `$count`
+**Arguments:** none.
+**Return type:** `long`.
+**Null behavior:** not applicable.
+**Collection behavior:** terminal — ends the chain (or a further scalar-only step) at a single number: the
+number of elements in the target array. An empty array gives `0`.
+**Error behavior:** `INVALID_TARGET` if the target is not an array. `INVALID_ARGUMENT_COUNT` if called with
+any argument.
+**Provider requirements:** translates to `COUNT(*)` / LINQ `Count()`.
+
+```
+$source([{id: 1}, {id: 2}, {id: 3}]).$count()   -- 3
+$source([]).$count()                            -- 0
+```
+
+## `$any`
+
+**Name:** `$any`
+**Arguments:** 0 or 1 — an optional predicate, evaluated per element exactly like `$filter`'s.
+**Return type:** `bool`.
+**Null behavior:** not applicable; the result is always `true` or `false`, following the same two-valued
+rules `$filter` already uses for its predicate.
+**Collection behavior:** terminal. `$any()` (no predicate) is `true` when the array has at least one
+element. `$any(predicate)` is `true` when at least one element satisfies it. An empty array is always
+`false`.
+**Error behavior:** `INVALID_TARGET` if the target is not an array. `INVALID_ARGUMENT_COUNT` for 2 or more
+arguments. Any error the predicate itself can raise, same as `$filter`.
+**Provider requirements:** translates to `EXISTS (...)` / LINQ `Any()`. A provider should stop scanning as
+soon as a match is found, the same way the in-memory implementation does.
+
+```
+$source([{id: 1}, {id: 2}]).$any()             -- true
+$source([]).$any()                             -- false
+$source([{id: 1}, {id: 2}]).$any(id eq 5)      -- false
+```
+
+## `$first`
+
+**Name:** `$first`
+**Arguments:** 0 or 1 — an optional predicate, evaluated per element exactly like `$filter`'s.
+**Return type:** the array's element type (not an array — a single value, or `null`).
+**Null behavior:** if no element exists (empty array, or none match the predicate), the result is `null`,
+not an error.
+**Collection behavior:** terminal. Returns the first element (in the target's current order — apply `$sort`
+first if a specific one matters) that satisfies the predicate, or the very first element if there is none.
+**Error behavior:** `INVALID_TARGET` if the target is not an array. `INVALID_ARGUMENT_COUNT` for 2 or more
+arguments. Any error the predicate itself can raise.
+**Provider requirements:** translates to `TOP 1` / `LIMIT 1` / LINQ `FirstOrDefault()`. Because the result
+can legitimately be `null` (either because the array was empty or because a row's own value is `null`),
+a provider cannot use "returned null" to mean "not found" versus "found a null value" — if that distinction
+ever matters to a caller, it needs `$any` or `$count` alongside `$first`, not `$first` alone.
+
+```
+$source([{id: 1}, {id: 2}]).$first()              -- {"id": 1}
+$source([]).$first()                              -- null
+$source([{id: 1}, {id: 2}]).$first(id eq 2)       -- {"id": 2}
+```
+
+## `$distinct`
+
+**Name:** `$distinct`
+**Arguments:** 0 or 1 — an optional key expression, evaluated per element exactly like `$filter`'s
+predicate (though its result does not need to be a `bool`).
+**Argument types:** any type.
+**Return type:** the same array type as the target.
+**Null behavior:** `null` is a value like any other for this purpose — two `null` keys are duplicates of
+each other, and a `null` element itself is deduplicated normally.
+**Collection behavior:** keeps the **first** element of every group of elements that share the same key
+(or, without a key, the same whole value), in their original relative order. Comparison is **structural**,
+not the `eq` operator: unlike `eq`, arrays and objects here are compared by their contents (an object is
+equal to another with the same field names and values, in any order; a missing field is not equal to a
+field present with value `null`). Numbers compare by value across types, exactly like `eq` (`1` and `1.0`
+are duplicates); strings compare ordinally.
+**Error behavior:** `INVALID_TARGET` if the target is not an array. `INVALID_ARGUMENT_COUNT` for 2 or more
+arguments.
+**Provider requirements:** translates to `SELECT DISTINCT` / `GROUP BY` / LINQ `Distinct()`/`DistinctBy()`.
+A provider is not required to preserve "first occurrence" order the way the in-memory implementation does,
+because SQL's `DISTINCT` does not guarantee it either — order after `$distinct` should be treated as
+unspecified unless followed by `$sort`.
+
+```
+$source([1, 2, 1, 3, 2]).$distinct()                              -- [1, 2, 3]
+$source([{g: 'a', n: 1}, {g: 'a', n: 2}, {g: 'b', n: 3}]).$distinct(g)  -- one row per g
+```
