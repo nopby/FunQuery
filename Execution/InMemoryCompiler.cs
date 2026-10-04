@@ -26,6 +26,12 @@ public sealed class InMemoryCompiler
     // bertambah lewat $let, dan snapshot/restore menjaga scope tetap lexical ke depan.
     private Dictionary<string, object?> _variables;
 
+    // Satu IndexCell per function element-scoped yang sedang dikompilasi, ditumpuk mengikuti
+    // nesting AST (sama seperti stack scope di SemanticContext). $index() membaca cell teratas;
+    // function pembungkus (Filter, Select, dst) mengisi Value-nya sebelum memanggil delegate
+    // per elemen. Lihat CompileIndexed dan docs/Functions.md.
+    private readonly Stack<IndexCell> _indexCells = new();
+
     internal InMemoryCompiler(
         ReadOnlyMemory<char> source,
         InMemoryFunctions functions,
@@ -37,6 +43,43 @@ public sealed class InMemoryCompiler
             ? new Dictionary<string, object?>(StringComparer.Ordinal)
             : new Dictionary<string, object?>(variables, StringComparer.Ordinal);
     }
+
+    // ------------------------------------------------------------------
+    // $index()
+    // ------------------------------------------------------------------
+
+    /// <summary>Cell yang dibaca $index(), milik function element-scoped terdekat yang sedang dikompilasi.</summary>
+    internal IndexCell? CurrentIndexCell => _indexCells.Count > 0 ? _indexCells.Peek() : null;
+
+    /// <summary>
+    /// Mengkompilasi sebuah ekspresi element-scoped (predikat $filter, proyektor $map/$select,
+    /// key $sort/$distinct, dan sejenisnya) sekaligus menyediakan IndexCell untuk $index() di
+    /// dalamnya. Pemanggil bertanggung jawab mengisi cell.Value = posisi elemen sebelum
+    /// memanggil delegate hasil, untuk setiap elemen.
+    /// </summary>
+    internal (Func<object?, object?> Compiled, IndexCell Cell) CompileIndexed(BaseExpression expression)
+    {
+        var cell = PushIndexCell();
+        var compiled = Compile(expression);
+        PopIndexCell();
+
+        return (compiled, cell);
+    }
+
+    /// <summary>
+    /// Push satu IndexCell baru dan kembalikan untuk dipakai bersama oleh beberapa Compile()
+    /// berikutnya (mis. tiap argumen bentuk daftar $select berbagi satu cell yang sama, karena
+    /// semuanya berada pada baris/posisi yang sama). Pemanggil wajib PopIndexCell() setelahnya.
+    /// </summary>
+    internal IndexCell PushIndexCell()
+    {
+        var cell = new IndexCell();
+        _indexCells.Push(cell);
+
+        return cell;
+    }
+
+    internal void PopIndexCell() => _indexCells.Pop();
 
     // ------------------------------------------------------------------
     // Variable (@nama)

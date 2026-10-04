@@ -240,3 +240,52 @@ unspecified unless followed by `$sort`.
 $source([1, 2, 1, 3, 2]).$distinct()                              -- [1, 2, 3]
 $source([{g: 'a', n: 1}, {g: 'a', n: 2}, {g: 'b', n: 3}]).$distinct(g)  -- one row per g
 ```
+
+## `$index`
+
+**Name:** `$index`
+**Arguments:** 0 or 1 — an optional `base` (the starting number), `int` only.
+**Argument types:** `base` must be `int` (not `long`, not `decimal` — a plain starting number). A variable
+is accepted if it resolves to `int`.
+**Return type:** `int`.
+**Null behavior:** not applicable; `$index()` always produces a number.
+**Collection behavior:** not itself a collection function — it is a scalar read inside the predicate or
+projector of the nearest enclosing per-element function (`$filter`, `$map`, `$select`, `$sort`, `$any`,
+`$first`, `$distinct`). It reports the position of the current element **in that function's own input
+sequence**, 0-based unless `base` shifts it, and is never affected by functions further up or down the
+chain.
+**Error behavior:** `ITEM_OUT_OF_CONTEXT` when used outside any such function. `INVALID_TARGET` if called on
+a target (`row.$index()` — it is always a leaf expression, like `$field`). `INVALID_ARGUMENT_COUNT` for 2 or
+more arguments. `TYPE_MISMATCH` if `base` is not `int`.
+**Provider requirements:** translates to `ROW_NUMBER() OVER (...)` or an equivalent ordinal function. A
+provider must require (or clearly document) that `$index()` is only meaningful after an explicit `$sort`,
+since SQL result order is otherwise unspecified — the in-memory provider does not have this restriction,
+because its sequence order is always well-defined.
+
+```
+$source(['a', 'b', 'c']).$map($index())                 -- [0, 1, 2]
+$source([{id: 1}, {id: 2}, {id: 3}]).$select({no: $index(1), id: id})   -- no starts at 1
+$source([{id: 1}, {id: 2}, {id: 3}]).$filter($index() lt 2)             -- first two, by position
+```
+
+### What "input sequence" means precisely
+
+`$index()` always counts positions in the sequence **as it exists when that particular function receives
+it** — not in the original source, and not in whatever the whole query eventually returns.
+
+* In `$filter`, the index is the position **before** filtering (the position among the elements being
+  tested, not among the ones that pass).
+* In every other function (`$map`, `$select`, `$sort`'s key, `$any`, `$first`, `$distinct`), the index is the
+  position in that function's own target — if a `$filter` or `$select` precedes it in the chain, the index
+  already reflects that narrower or reordered sequence.
+* In `$select`'s list form, every argument shares the same index for the same row — `$select(id, $index())`
+  and `$select($index(), id)` report the same number for one and the same row.
+* `$index()` is independent across nesting: a `$map` whose own projector contains a full nested chain (for
+  example projecting a sub-array through its own `$map`) gets its own index starting from `0`, unrelated to
+  the outer `$map`'s.
+
+```
+$source([{id: 1}, {id: 2}, {id: 3}])
+    .$filter(id gt 1)                      -- keeps id 2 and 3
+    .$select({no: $index(), id: id})       -- no is 0 and 1 here, not 1 and 2
+```

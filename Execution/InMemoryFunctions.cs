@@ -54,5 +54,6 @@ public sealed class InMemoryFunctions
             .Add("$count", CoreInMemoryFunctions.Count)
             .Add("$any", CoreInMemoryFunctions.Any)
             .Add("$first", CoreInMemoryFunctions.First)
-            .Add("$distinct", CoreInMemoryFunctions.Distinct);
+            .Add("$distinct", CoreInMemoryFunctions.Distinct)
+            .Add("$index", CoreInMemoryFunctions.Index);
 }

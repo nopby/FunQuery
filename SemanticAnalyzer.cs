@@ -496,6 +496,9 @@ public static class SemanticAnalyzer
         if (functionName == "$sort")
             return AnalyzeSort(expression, context);
 
+        if (functionName == "$index")
+            return AnalyzeIndex(expression, context);
+
         var targetType = expression.Target?.SemanticType;
 
         // 4. Analyze argumen (di dalam scope field elemen kalau fungsi membutuhkannya)
@@ -847,6 +850,49 @@ public static class SemanticAnalyzer
         }
 
         expression.SemanticType = expression.Target.SemanticType;
+
+        return expression;
+    }
+
+    /// <summary>
+    /// $index() atau $index(base): posisi elemen saat ini pada sekuens masukan step tempat
+    /// $index() dipakai (0-based, atau mulai dari base bila diberi). Valid di mana pun ada
+    /// scope elemen aktif ($filter, $map, $select, $sort, $any, $first, $distinct), sama
+    /// seperti '~'. Lihat docs/Functions.md.
+    /// </summary>
+    private static CallExpression AnalyzeIndex(CallExpression expression, SemanticContext context)
+    {
+        if (expression.Arguments.Count > 1)
+            throw new QueryException(
+                QueryErrorCode.InvalidArgumentCount,
+                "Function '$index' accepts at most 1 argument: $index() or $index(base).",
+                expression.Function);
+
+        if (context.CurrentElementType is null)
+            throw new QueryException(
+                QueryErrorCode.ItemOutOfContext,
+                "'$index' can only be used inside a function that evaluates per element, " +
+                "such as $filter.",
+                expression.Span);
+
+        if (expression.Arguments.Count == 1)
+        {
+            Analyze(expression.Arguments[0], context);
+
+            var baseType =
+                expression.Arguments[0].SemanticType
+                ?? throw new QueryException(
+                    QueryErrorCode.InternalError,
+                    "$index's base argument has no semantic type.");
+
+            if (baseType is not IntType)
+                throw new QueryException(
+                    QueryErrorCode.TypeMismatch,
+                    $"Argument 1 of '$index' expects int, got {baseType.Name}.",
+                    expression.Arguments[0].Span);
+        }
+
+        expression.SemanticType = SemanticTypeOptions.Int;
 
         return expression;
     }

@@ -94,6 +94,18 @@ public sealed class CoreFunctions : IQueryExtension
 
         registry.Add(new FunctionDefinition
         {
+            // $index() atau $index(base): dianalisis secara khusus (lihat
+            // SemanticAnalyzer.AnalyzeIndex), karena ia tidak menghasilkan scope baru
+            // (bukan UsesElementScope), melainkan membaca scope elemen milik function
+            // pembungkusnya. TargetRule.Forbidden: $index selalu dipakai sebagai operand,
+            // tidak pernah dirantai pada data.
+            Name = "$index",
+            Parameters = [],
+            TargetRule = TargetRule.Forbidden,
+        });
+
+        registry.Add(new FunctionDefinition
+        {
             Name = "$count",
             Parameters = [],
             TargetRule = TargetRule.Required,

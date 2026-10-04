@@ -3,8 +3,40 @@ using FunQuery.Expressions;
 
 namespace FunQuery.Execution;
 
+/// <summary>
+/// Kotak mutable berisi posisi elemen saat ini, dibaca $index(). Satu instance dibuat per
+/// function element-scoped yang dikompilasi (lihat InMemoryCompiler.CompileIndexed), dan diisi
+/// ulang oleh function itu sendiri sebelum memanggil delegate untuk tiap elemen.
+/// </summary>
+internal sealed class IndexCell
+{
+    public int Value;
+}
+
 internal static class CoreInMemoryFunctions
 {
+    /// <summary>$index() atau $index(base): posisi elemen pada function pembungkus terdekat.</summary>
+    public static Func<object?, object?> Index(InMemoryCompiler compiler, CallExpression call)
+    {
+        var cell = compiler.CurrentIndexCell
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
+                "$index has no active index cell; the analyzer should have rejected this " +
+                "as ITEM_OUT_OF_CONTEXT.",
+                call.Function);
+
+        var baseValue = 0;
+
+        if (call.Arguments.Count == 1)
+        {
+            var baseFn = compiler.Compile(call.Arguments[0]);
+            baseValue = (int)baseFn(null)!;
+        }
+
+        return _ => cell.Value + baseValue;
+    }
+
+
     /// <summary>$source(array): sumber data dari array inline.</summary>
     public static Func<object?, object?> Source(InMemoryCompiler compiler, CallExpression call)
     {
@@ -104,19 +136,25 @@ internal static class CoreInMemoryFunctions
                 "$filter has no target.",
                 call.Function));
 
-        var predicate = compiler.Compile(call.Arguments[0]);
+        var (predicate, cell) = compiler.CompileIndexed(call.Arguments[0]);
 
         return element => FilterSequence(
             target(element) as IEnumerable<object?> ?? [],
-            predicate);
+            predicate,
+            cell);
     }
 
     private static IEnumerable<object?> FilterSequence(
         IEnumerable<object?> items,
-        Func<object?, object?> predicate)
+        Func<object?, object?> predicate,
+        IndexCell cell)
     {
+        int index = 0;
+
         foreach (var item in items)
         {
+            cell.Value = index++;
+
             if (ValueOperations.IsTrue(predicate(item)))
                 yield return item;
         }
@@ -132,9 +170,9 @@ internal static class CoreInMemoryFunctions
                 "$map has no target.",
                 call.Function));
 
-        var projector = compiler.Compile(call.Arguments[0]);
+        var (projector, cell) = compiler.CompileIndexed(call.Arguments[0]);
 
-        return element => Project(target(element) as IEnumerable<object?> ?? [], projector);
+        return element => Project(target(element) as IEnumerable<object?> ?? [], projector, cell);
     }
 
     /// <summary>
@@ -151,19 +189,30 @@ internal static class CoreInMemoryFunctions
                 "$select has no target.",
                 call.Function));
 
-        var projector = call.Arguments is [BlockExpression]
-            ? compiler.Compile(call.Arguments[0])
+        // Object form ($select({...})) sudah satu ekspresi tunggal, jadi CompileIndexed langsung
+        // dipakai sama seperti $map. Bentuk daftar ($select(id, name)) berisi beberapa argumen,
+        // dan semuanya harus berbagi SATU cell yang sama (posisi elemen sama untuk tiap field
+        // pada baris yang sama), jadi cell dibuat sendiri lalu tiap argumen dikompilasi di
+        // dalam scope cell itu lewat CompileIndexed bersarang secara manual (push sekali,
+        // compile semua argumen, pop sekali) di CompileFieldList.
+        var (projector, cell) = call.Arguments is [BlockExpression]
+            ? compiler.CompileIndexed(call.Arguments[0])
             : CompileFieldList(compiler, call.Arguments);
 
-        return element => Project(target(element) as IEnumerable<object?> ?? [], projector);
+        return element => Project(target(element) as IEnumerable<object?> ?? [], projector, cell);
     }
 
-    private static Func<object?, object?> CompileFieldList(
+    private static (Func<object?, object?> Projector, IndexCell Cell) CompileFieldList(
         InMemoryCompiler compiler,
         IReadOnlyList<BaseExpression> arguments)
     {
         var keys = new string[arguments.Count];
         var values = new Func<object?, object?>[arguments.Count];
+
+        // Satu cell dipakai bersama oleh semua argumen: tiap field pada baris yang sama
+        // berada di posisi yang sama, jadi $index() di salah satu argumen harus melihat
+        // nilai yang sama dengan $index() di argumen lain pada pemanggilan yang sama.
+        var cell = compiler.PushIndexCell();
 
         for (int i = 0; i < arguments.Count; i++)
         {
@@ -171,9 +220,11 @@ internal static class CoreInMemoryFunctions
             values[i] = compiler.Compile(arguments[i]);
         }
 
+        compiler.PopIndexCell();
+
         var shape = new ObjectShape(keys);
 
-        return item =>
+        Func<object?, object?> projector = item =>
         {
             var row = new object?[values.Length];
 
@@ -182,15 +233,23 @@ internal static class CoreInMemoryFunctions
 
             return new ObjectValue(shape, row);
         };
+
+        return (projector, cell);
     }
 
     /// <summary>Menerapkan sebuah proyektor ke tiap elemen sekuens, dipakai $map dan $select.</summary>
     private static IEnumerable<object?> Project(
         IEnumerable<object?> items,
-        Func<object?, object?> projector)
+        Func<object?, object?> projector,
+        IndexCell cell)
     {
+        int index = 0;
+
         foreach (var item in items)
+        {
+            cell.Value = index++;
             yield return projector(item);
+        }
     }
 
     /// <summary>
@@ -209,7 +268,7 @@ internal static class CoreInMemoryFunctions
                 "$sort has no target.",
                 call.Function));
 
-        var key = compiler.Compile(call.Arguments[0]);
+        var (key, cell) = compiler.CompileIndexed(call.Arguments[0]);
 
         var descending = call.Arguments.Count == 2 &&
             compiler.GetIdentifierText(call.Arguments[1]) == "desc";
@@ -221,6 +280,8 @@ internal static class CoreInMemoryFunctions
 
             for (int i = 0; i < items.Count; i++)
             {
+                // $index() di dalam key $sort merujuk posisi sebelum pengurutan.
+                cell.Value = i;
                 var value = key(items[i]);
                 entries[i] = (items[i], value is null, value, i);
             }
@@ -310,12 +371,17 @@ internal static class CoreInMemoryFunctions
     public static Func<object?, object?> Any(InMemoryCompiler compiler, CallExpression call)
     {
         var target = TargetOf(compiler, call);
-        var predicate = call.Arguments.Count == 1 ? compiler.Compile(call.Arguments[0]) : null;
+        var (predicate, cell) = CompilePredicateOrNull(compiler, call);
 
         return element =>
         {
+            int index = 0;
+
             foreach (var item in target(element) as IEnumerable<object?> ?? [])
             {
+                if (cell is not null)
+                    cell.Value = index++;
+
                 if (predicate is null || ValueOperations.IsTrue(predicate(item)))
                     return true;
             }
@@ -328,18 +394,35 @@ internal static class CoreInMemoryFunctions
     public static Func<object?, object?> First(InMemoryCompiler compiler, CallExpression call)
     {
         var target = TargetOf(compiler, call);
-        var predicate = call.Arguments.Count == 1 ? compiler.Compile(call.Arguments[0]) : null;
+        var (predicate, cell) = CompilePredicateOrNull(compiler, call);
 
         return element =>
         {
+            int index = 0;
+
             foreach (var item in target(element) as IEnumerable<object?> ?? [])
             {
+                if (cell is not null)
+                    cell.Value = index++;
+
                 if (predicate is null || ValueOperations.IsTrue(predicate(item)))
                     return item;
             }
 
             return null;
         };
+    }
+
+    private static (Func<object?, object?>? Predicate, IndexCell? Cell) CompilePredicateOrNull(
+        InMemoryCompiler compiler,
+        CallExpression call)
+    {
+        if (call.Arguments.Count == 0)
+            return (null, null);
+
+        var (predicate, cell) = compiler.CompileIndexed(call.Arguments[0]);
+
+        return (predicate, cell);
     }
 
     /// <summary>
@@ -350,15 +433,19 @@ internal static class CoreInMemoryFunctions
     public static Func<object?, object?> Distinct(InMemoryCompiler compiler, CallExpression call)
     {
         var target = TargetOf(compiler, call);
-        var key = call.Arguments.Count == 1 ? compiler.Compile(call.Arguments[0]) : null;
+        var (key, cell) = CompilePredicateOrNull(compiler, call);
 
         return element =>
         {
             var seen = new HashSet<object?>(ValueEqualityComparer.Instance);
             var result = new List<object?>();
+            int index = 0;
 
             foreach (var item in target(element) as IEnumerable<object?> ?? [])
             {
+                if (cell is not null)
+                    cell.Value = index++;
+
                 if (seen.Add(key is null ? item : key(item)))
                     result.Add(item);
             }
