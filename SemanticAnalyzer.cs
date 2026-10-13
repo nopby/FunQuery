@@ -92,6 +92,18 @@ public static class SemanticAnalyzer
         var type =
             context.ResolveIdentifier(name);
 
+        if (type is null && context.IsOuterField(name))
+        {
+            // Field-nya ada, tapi bukan milik elemen terdalam: runtime hanya membaca elemen
+            // terdalam, jadi jawaban yang diberikan analyzer dulu akan salah secara diam-diam.
+            throw new QueryException(
+                QueryErrorCode.ItemOutOfContext,
+                $"Field '{name}' belongs to an outer element; only the current element's fields " +
+                "can be read here (a $let value has no current element, and a nested chain sees " +
+                "only its own elements).",
+                expression.Span);
+        }
+
         if (type is null)
         {
             throw new QueryException(
@@ -557,12 +569,15 @@ public static class SemanticAnalyzer
                 "The first argument of '$let' must be a variable, e.g. $let(@name, value).",
                 expression.Arguments[0].Span);
 
-        // Nilai dianalisis dalam scope saat ini (mis. di dalam $filter bila $let dipakai di situ).
+        // Nilai dianalisis dalam scope "detached" (tanpa elemen): di runtime nilai $let dihitung
+        // sekali tanpa baris "saat ini" (CoreInMemoryFunctions.Let memanggil valueFn(null)), jadi
+        // field, ~, $index(), dan $field() milik elemen di luarnya tidak bisa dipakai di sini.
         // Snapshot lalu restore supaya $let bersarang di dalam nilai ini tidak bocor keluar;
         // hanya binding milik $let ini sendiri yang berlaku untuk step berikutnya.
         var snapshot = context.SnapshotVariables();
 
-        Analyze(expression.Arguments[1], context);
+        using (context.EnterDetachedScope())
+            Analyze(expression.Arguments[1], context);
 
         context.RestoreVariables(snapshot);
 

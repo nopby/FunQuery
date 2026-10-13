@@ -15,8 +15,9 @@ $source([{id: 1}, {id: 2}]).$filter(~.id eq 1)
 ```
 
 * Outside an element-scoped function, `~` is `ITEM_OUT_OF_CONTEXT`. This includes the value expression of
-  a `$let` that is not itself nested inside such a function: `$source([1]).$let(@x, ~)` fails, because
-  `$let`'s value is evaluated in the surrounding scope, which has no current element there.
+  **any** `$let`, even one written inside `$filter`'s predicate or a `$map` projector: a `$let` value is
+  evaluated once with no current element (`$source([1]).$let(@x, ~)` fails, and so does
+  `$source([{n: 1}]).$map($let(@b, ~).$source([@b]))`).
 * `~` may be the whole predicate, exactly like a field: `$filter(~)` keeps every truthy element.
 * `~` participates in every operator the same way a field does, subject to the usual type rules. Comparing
   `~ eq ~` is only valid for scalar elements (numbers, strings, booleans), because arrays and objects still
@@ -67,6 +68,16 @@ $filter(address.geo.lat gt 0)              -- any depth
   to handle one "no such field" case.
 * If the *root* of a path does not exist at all — `addr.city` where the row has no `addr` field — the error
   is reported on the root (`Unknown identifier 'addr'.`), before the `.city` part is even considered.
+* Only the **innermost** element scope can be read. A nested chain (`$map`, `$filter`, …) and a `$let` value
+  see only their own elements: a bare identifier that exists in an enclosing element scope but not in the
+  innermost one is `ITEM_OUT_OF_CONTEXT`, with a message saying the field belongs to an "outer element"
+  (`Field 'n' belongs to an outer element; only the current element's fields can be read here…`). Reading
+  the outer element is not supported in v1 (see `~~` below), and the analyzer now says so instead of
+  silently reading null at execution time.
+* Parts of a nested chain that are *not* themselves element scopes still see the outer element: the array
+  argument of a nested `$source` (`$map($source([n]))`), a nested `$take(n)`/`$skip(n)` count, and similar
+  arguments are evaluated with the outer element at execution time, so a field of the outer element
+  resolves there normally.
 
 ### Grammar note: three roles of `.`
 
@@ -128,7 +139,9 @@ type used elsewhere for values a provider can only describe at runtime.
 
 | Situation | Code |
 | --- | --- |
-| `~` used outside an element-scoped function | `ITEM_OUT_OF_CONTEXT` |
+| `~` used outside an element-scoped function, or inside any `$let` value | `ITEM_OUT_OF_CONTEXT` |
+| A bare identifier names a field of an outer element (from a nested chain or a `$let` value) | `ITEM_OUT_OF_CONTEXT` |
+| `$field` used outside an element-scoped function, or inside any `$let` value | `ITEM_OUT_OF_CONTEXT` |
 | A field access step's target is not an object | `TYPE_MISMATCH` |
 | A field named in a path does not exist on its (object) target | `UNKNOWN_IDENTIFIER` |
 | The root identifier of a path does not exist at all | `UNKNOWN_IDENTIFIER` |
@@ -142,6 +155,8 @@ type used elsewhere for values a provider can only describe at runtime.
 * **Paths through a variable** (`@x.field`). Variables are opaque values in v1; introspecting into a bound
   object through a path may be added later without changing anything specified here.
 * **`~~` (the parent element)**, for nested collections — not needed until collections can appear inside
-  other collections' predicates, which is a later extension.
+  other collections' predicates, which is a later extension. Until it exists there is no way to reach an
+  outer element's fields at all, so a nested chain or a `$let` value that tries is rejected with
+  `ITEM_OUT_OF_CONTEXT` (see the field-path notes above).
 * **Paths after `$field(@variable)`'s own result** (`$field(@x).y`). `$field`'s result is always a leaf
   value in v1; chaining a further path onto it may be added later without changing anything specified here.

@@ -322,4 +322,48 @@ public class TildeAndFieldAccessTests
                 ".$source([{id: 1, addr: {city: 'Jakarta'}}, {id: 2, addr: {city: 'Bandung'}}])" +
                 ".$filter(not addr.city eq @city)"));
     }
+
+    // ------------------------------------------------------------------
+    // Analyzer: a nested chain sees only its own elements (M4.5)
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void ANestedChainsPredicate_CannotReadAFieldOfTheOuterElement()
+    {
+        var error = QueryAssert.Fails(
+            QueryErrorCode.ItemOutOfContext,
+            60,
+            1,
+            () => QueryPipeline.Analyze("$source([{n: 1}, {n: 2}]).$map($source([1, 2]).$filter(~ eq n))"));
+
+        Assert.Contains("outer element", error.Message);
+    }
+
+    [Theory]
+    [InlineData("$source([{n: 1}]).$filter($source([{m: 1}]).$any(m eq n))")]
+    [InlineData("$source([{n: 1}]).$map($source([{m: 1}]).$map(n))")]
+    public void ANestedChain_CannotReadAFieldOfTheOuterElement(string query)
+    {
+        var error = QueryAssert.Fails(
+            QueryErrorCode.ItemOutOfContext,
+            () => QueryPipeline.Analyze(query));
+
+        Assert.Contains("outer element", error.Message);
+    }
+
+    [Theory]
+    [InlineData("$source([{n: 1}, {n: 2}]).$map($source([n]))", "[[1],[2]]")]
+    [InlineData(
+        "$source([{n: 1, xs: [1, 2]}, {n: 2, xs: [2, 3]}]).$map($source(xs).$filter(~ gt 1))",
+        "[[2],[2,3]]")]
+    [InlineData("$source([{n: 1}]).$map($source([{n: 7}]).$map(n))", "[[7]]")]
+    [InlineData("$source([{n: 1}, {n: 2}]).$map($source([10, 20, 30]).$take(n))", "[[10],[10,20]]")]
+    [InlineData("$source([{n: 1}, {n: 2}]).$select({v: $source([n]).$map(~)})", """[{"v":[1]},{"v":[2]}]""")]
+    public void ANestedChainsOwnArguments_CanStillReadTheOuterElement(string query, string expected)
+    {
+        // Inside a nested chain but outside its own element scopes, the innermost active
+        // scope is still the outer element's: at runtime those arguments are evaluated
+        // with the outer element, so they keep working.
+        Assert.Equal(expected, Run(query));
+    }
 }

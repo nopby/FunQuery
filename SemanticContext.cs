@@ -18,7 +18,8 @@ public sealed class SemanticContext
     private readonly Stack<IReadOnlyDictionary<string, SemanticType>> _scopes = new();
 
     // Tipe elemen saat ini untuk '~', selalu didorong/dilepas bersama _scopes.
-    private readonly Stack<SemanticType> _elementTypes = new();
+    // Nil berarti scope "detached" (mis. nilai $let): tidak ada elemen saat ini.
+    private readonly Stack<SemanticType?> _elementTypes = new();
 
     private static readonly IReadOnlyDictionary<string, SemanticType> NoFields =
         new Dictionary<string, SemanticType>();
@@ -137,6 +138,21 @@ public sealed class SemanticContext
         return new ScopeGuard(this);
     }
 
+    /// <summary>
+    /// Masuk ke scope tanpa elemen: dipakai untuk nilai $let, yang di runtime dihitung sekali
+    /// tanpa baris "saat ini" (lihat CoreInMemoryFunctions.Let). Scope ini menutupi scope elemen
+    /// di luarnya, sehingga '~', $index(), dan $field() milik elemen luar ditolak dengan
+    /// ITEM_OUT_OF_CONTEXT, dan field polos milik elemen luar ditolak sebagai field elemen luar.
+    /// Pemakaian: using (context.EnterDetachedScope()) { ... }
+    /// </summary>
+    public IDisposable EnterDetachedScope()
+    {
+        _elementTypes.Push(null);
+        _scopes.Push(NoFields);
+
+        return new ScopeGuard(this);
+    }
+
     private void PopScope()
     {
         if (_scopes.Count == 0)
@@ -148,7 +164,8 @@ public sealed class SemanticContext
         _elementTypes.Pop();
     }
 
-    /// <summary>Tipe '~' pada scope elemen terdalam, atau null bila di luar konteks per-elemen.</summary>
+    /// <summary>Tipe '~' pada scope elemen terdalam, atau null bila di luar konteks per-elemen
+    /// (termasuk di dalam scope detached milik nilai $let).</summary>
     public SemanticType? CurrentElementType =>
         _elementTypes.Count > 0 ? _elementTypes.Peek() : null;
 
@@ -169,19 +186,21 @@ public sealed class SemanticContext
     // ------------------------------------------------------------------
 
     /// <summary>
-    /// Field dari item saat ini. Hanya ada di scope elemen (mis. di dalam $filter),
-    /// tidak ada lagi mekanisme identifier global.
+    /// Field dari elemen saat ini: hanya scope terdalam. Runtime membaca field dari elemen
+    /// terdalam saja (lihat docs/FieldAccess.md; elemen luar lewat '~~' di luar cakupan v1),
+    /// jadi scope yang lebih luar tidak pernah menjadi jawaban yang benar.
     /// </summary>
-    public SemanticType? ResolveIdentifier(string name)
-    {
-        foreach (var scope in _scopes)
-        {
-            if (scope.TryGetValue(name, out var scoped))
-                return scoped;
-        }
+    public SemanticType? ResolveIdentifier(string name) =>
+        _scopes.Count > 0 && _scopes.Peek().TryGetValue(name, out var scoped) ? scoped : null;
 
-        return null;
-    }
+    /// <summary>
+    /// True bila nama ini field milik scope elemen di luar scope terdalam (mis. field elemen
+    /// $map luar yang dibaca dari dalam chain bersarang atau dari nilai $let). Analyzer memakainya
+    /// untuk membedakan "field ada, tapi tidak terjangkau dari sini" (ITEM_OUT_OF_CONTEXT) dari
+    /// field yang memang tidak dikenal di mana pun (UNKNOWN_IDENTIFIER).
+    /// </summary>
+    public bool IsOuterField(string name) =>
+        _scopes.Skip(1).Any(scope => scope.ContainsKey(name));
 
     public FunctionDefinition? ResolveFunction(string name) =>
         _functions.TryGet(name, out var function)

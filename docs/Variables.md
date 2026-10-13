@@ -90,9 +90,10 @@ $let(@x, 1).$let(@x, 2)...   -- VARIABLE_REDEFINED, pointing at the second @x
 * `value` is evaluated **once**, not once per row. `$let(@min, 18)` computes `18` a single time, no matter
   how many rows the query later produces.
 * `value` may be a full sub-chain, for example `$let(@x, $source(...).$filter(...))`. It is evaluated with
-  no "current row" — it cannot use `$let`'s own outer context's element scope, only fields and variables
-  that are otherwise in scope at that point (for instance, if `$let` sits inside `$filter`'s predicate, the
-  value can see that predicate's element fields).
+  **no "current row"**: fields, `~`, `$index()`, and `$field()` of any element scope around the `$let` are
+  not available inside its value — including when the `$let` sits inside `$filter`'s predicate or a `$map`
+  projector. Using one there is `ITEM_OUT_OF_CONTEXT` (a plain field reports that it belongs to an "outer
+  element"). Only variables, and the element scopes created by the value's own nested chains, can be used.
 * The resulting value is **materialized**: a computed value, not a query that gets re-run. This matches the
   language's general rule that a variable holds a value, never a function.
 * A provider is free to implement this differently (for example, translating a `$let` value into a SQL CTE
@@ -126,6 +127,7 @@ $let(@items, [{id: 1}, {id: 2}])
 | `$let` called with a number of arguments other than 2 | `INVALID_ARGUMENT_COUNT` |
 | `@name` referenced but never bound in the visible scope | `UNDEFINED_VARIABLE` |
 | `@name` declared twice in the same visible scope | `VARIABLE_REDEFINED` |
+| A `$let` value reads a field, `~`, `$index()`, or `$field()` of an element scope around the `$let` | `ITEM_OUT_OF_CONTEXT` |
 | `$source(@name)` where `@name` is not an array | `TYPE_MISMATCH` |
 | A function with `TargetRule.Forbidden` is called after real data, even through `$let` | `INVALID_TARGET` |
 

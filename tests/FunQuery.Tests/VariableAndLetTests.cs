@@ -380,4 +380,117 @@ public class VariableAndLetTests
             "[[2,3]]",
             Run("$let(@x, $source([1, 2, 3]).$filter(~ gt 1)).$source([@x, @x]).$distinct()"));
     }
+
+    // ------------------------------------------------------------------
+    // Analyzer: a $let value has no current element (M4.5)
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void ALetsValue_CannotReadAFieldOfTheSurroundingElement()
+    {
+        var error = QueryAssert.Fails(
+            QueryErrorCode.ItemOutOfContext,
+            40,
+            1,
+            () => QueryPipeline.Analyze(
+                "$source([{n: 1}, {n: 2}]).$map($let(@b, n).$source([@b]))"));
+
+        Assert.Contains("outer element", error.Message);
+    }
+
+    [Theory]
+    [InlineData("~")]
+    [InlineData("$index()")]
+    public void ALetsValue_CannotReadTheSurroundingElementsTildeOrIndex(string value)
+    {
+        QueryAssert.Fails(
+            QueryErrorCode.ItemOutOfContext,
+            () => QueryPipeline.Analyze(
+                $"$source([{{n: 1}}, {{n: 2}}]).$map($let(@b, {value}).$source([@b]))"));
+    }
+
+    [Fact]
+    public void ALetsValue_CannotUseFieldOnTheSurroundingElement()
+    {
+        var error = QueryAssert.Fails(
+            QueryErrorCode.ItemOutOfContext,
+            () => QueryPipeline.Analyze(
+                "$let(@c, 'n').$source([{n: 1}]).$map($let(@b, $field(@c)).$source([@b]))"));
+
+        Assert.Contains("$field", error.Message);
+    }
+
+    [Fact]
+    public void ALetsValue_CannotBuildAnObjectFromAFieldOfTheSurroundingElement()
+    {
+        var error = QueryAssert.Fails(
+            QueryErrorCode.ItemOutOfContext,
+            () => QueryPipeline.Analyze(
+                "$source([{n: 1}, {n: 2}]).$map($let(@b, {v: n}).$source([@b]))"));
+
+        Assert.Contains("outer element", error.Message);
+    }
+
+    [Fact]
+    public void ALetsValue_CannotReadAPathOfTheSurroundingElement()
+    {
+        var error = QueryAssert.Fails(
+            QueryErrorCode.ItemOutOfContext,
+            43,
+            1,
+            () => QueryPipeline.Analyze(
+                "$source([{n: 1, a: {c: 2}}]).$map($let(@b, a.c).$source([@b]))"));
+
+        Assert.Contains("outer element", error.Message);
+    }
+
+    [Fact]
+    public void ALetsOwnNestedChain_CannotReadTheSurroundingElementEither()
+    {
+        // The inner $filter brings its own element (~ eq ...), but 'n' still belongs to
+        // the $map around the $let, and the $let value has no element at all.
+        var error = QueryAssert.Fails(
+            QueryErrorCode.ItemOutOfContext,
+            () => QueryPipeline.Analyze(
+                "$source([{n: 1}]).$map($let(@b, $source([1, 2]).$filter(~ eq n)).$source([@b]))"));
+
+        Assert.Contains("outer element", error.Message);
+    }
+
+    [Theory]
+    [InlineData("$source([{n: 1}]).$filter($let(@b, n).$source([1]).$any())")]
+    [InlineData("$source([{n: 1}]).$select({v: $let(@b, n).$source([@b])})")]
+    [InlineData("$source([{n: 1}]).$sort($let(@b, n).$source([@b]).$count())")]
+    public void ALetsValue_IsAlsoDetachedInEveryOtherElementScopedFunction(string query)
+    {
+        var error = QueryAssert.Fails(
+            QueryErrorCode.ItemOutOfContext,
+            () => QueryPipeline.Analyze(query));
+
+        Assert.Contains("outer element", error.Message);
+    }
+
+    // ------------------------------------------------------------------
+    // Analyzer controls: what a $let value may still do (M4.5)
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("$source([{n: 1}, {n: 2}]).$map($let(@b, 5).$source([@b]))", "[[5],[5]]")]
+    [InlineData("$let(@k, 2).$source([{n: 1}]).$map($let(@b, @k).$source([@b]))", "[[2]]")]
+    [InlineData("$source([{n: 1}]).$map($let(@b, $source([1, 2]).$filter(~ gt 1)).$source([@b]))", "[[[2]]]")]
+    [InlineData("$source([{n: 1}]).$map($let(@b, $source([1, 2]).$map($index())).$source([@b]))", "[[[0,1]]]")]
+    public void ALetsValueCanUseConstantsAndVariablesAndItsOwnChains(string query, string expected)
+    {
+        Assert.Equal(expected, Run(query));
+    }
+
+    [Theory]
+    [InlineData("$let(@x, n).$source([1])")]
+    [InlineData("$source([{n: 1}]).$let(@x, n).$filter(n eq 1)")]
+    public void ALetsValueWithNoElementScopeAtAll_IsStillUnknownIdentifier(string query)
+    {
+        // There is no element scope to blame here, so the plain identifier keeps its
+        // original UNKNOWN_IDENTIFIER (not ITEM_OUT_OF_CONTEXT).
+        QueryAssert.Fails(QueryErrorCode.UnknownIdentifier, () => QueryPipeline.Analyze(query));
+    }
 }

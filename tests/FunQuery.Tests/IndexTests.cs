@@ -272,4 +272,18 @@ public class IndexTests
         // overflows once a position is added to it.
         Assert.Equal("[2147483647]", Run("$source([1]).$map($index(2147483647))"));
     }
+
+    [Fact]
+    public void IndexRuntimeGuard_IsReachedWhenAFirstOverNullIsTheBase()
+    {
+        // $first over an array whose first element is null binds @b to null although the
+        // analyzer sees int, which is exactly what the runtime guard exists for.
+        var error = QueryAssert.Fails(
+            QueryErrorCode.TypeMismatch,
+            66,
+            2,
+            () => Engine.Execute("$let(@b, $source([null, 1]).$first()).$source([1, 2]).$map($index(@b))"));
+
+        Assert.Contains("must resolve to an int base", error.Message);
+    }
 }
