@@ -245,8 +245,10 @@ $source([{g: 'a', n: 1}, {g: 'a', n: 2}, {g: 'b', n: 3}]).$distinct(g)  -- one r
 
 **Name:** `$index`
 **Arguments:** 0 or 1 — an optional `base` (the starting number), `int` only.
-**Argument types:** `base` must be `int` (not `long`, not `decimal` — a plain starting number). A variable
-is accepted if it resolves to `int`.
+**Argument types:** `base` must be a plain `int` literal (negative included, e.g. `$index(-1)`) or a variable
+that resolves to `int`; not `long`, not `decimal`. Any other form — a field, `~`, another function call, a
+chain — is rejected, even when it would evaluate to an `int`, because the base is fixed once before the
+first element exists.
 **Return type:** `int`.
 **Null behavior:** not applicable; `$index()` always produces a number.
 **Collection behavior:** not itself a collection function — it is a scalar read inside the predicate or
@@ -256,7 +258,12 @@ sequence**, 0-based unless `base` shifts it, and is never affected by functions 
 chain.
 **Error behavior:** `ITEM_OUT_OF_CONTEXT` when used outside any such function. `INVALID_TARGET` if called on
 a target (`row.$index()` — it is always a leaf expression, like `$field`). `INVALID_ARGUMENT_COUNT` for 2 or
-more arguments. `TYPE_MISMATCH` if `base` is not `int`.
+more arguments. `INVALID_INDEX_ARGUMENT` if `base` is anything other than an `int` literal or a variable
+(for example `$index(id)`, `$index(~)`, `$index($index())`). `TYPE_MISMATCH` if `base` is a literal or a
+variable that is not `int` — for example `$index(1.5)` — or if a variable does not actually hold an `int` at
+run time. `NUMBER_OUT_OF_RANGE` when the element position plus `base` would leave the range of `int` (for
+example `$index(2147483647)`, which is fine for the first element but overflows on the second) instead of
+silently wrapping around.
 **Provider requirements:** translates to `ROW_NUMBER() OVER (...)` or an equivalent ordinal function. A
 provider must require (or clearly document) that `$index()` is only meaningful after an explicit `$sort`,
 since SQL result order is otherwise unspecified — the in-memory provider does not have this restriction,

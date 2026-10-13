@@ -80,6 +80,35 @@ public class IndexTests
     }
 
     [Theory]
+    [InlineData("id")]
+    [InlineData("~")]
+    [InlineData("$index()")]
+    public void IndexRejectsABaseThatIsNeitherALiteralNorAVariable(string baseArgument)
+    {
+        // The base is evaluated once, before any element exists, so anything element-scoped
+        // (a field, ~, a nested call) can never be a valid base. Before it was rejected here
+        // it reached the runtime and crashed with a NullReferenceException.
+        var error = QueryAssert.Fails(
+            QueryErrorCode.InvalidIndexArgument,
+            () => QueryPipeline.Analyze(
+                $"$source([{{id: 1}}, {{id: 2}}]).$map($index({baseArgument}))"));
+
+        Assert.Contains("int literal or a variable", error.Message);
+    }
+
+    [Fact]
+    public void IndexChecksTheBaseShapeBeforeItsType()
+    {
+        // 's' is a string field: a type-first check would report TYPE_MISMATCH. The shape
+        // check runs first and rejects the field form itself, before any type is looked at.
+        var error = QueryAssert.Fails(
+            QueryErrorCode.InvalidIndexArgument,
+            () => QueryPipeline.Analyze("$source([{s: 'x'}]).$map($index(s))"));
+
+        Assert.Contains("int literal or a variable", error.Message);
+    }
+
+    [Theory]
     [InlineData("$filter")]
     [InlineData("$any")]
     [InlineData("$first")]
@@ -116,6 +145,12 @@ public class IndexTests
     public void IndexBaseCanComeFromAVariable()
     {
         Assert.Equal("[5,6]", Run("$let(@n, 5).$source(['a', 'b']).$map($index(@n))"));
+    }
+
+    [Fact]
+    public void IndexWithANegativeBase_StartsCountingBelowZero()
+    {
+        Assert.Equal("[-1,0]", Run("$source(['a', 'b']).$map($index(-1))"));
     }
 
     [Fact]
@@ -195,5 +230,46 @@ public class IndexTests
     public void IndexOfAnEmptyArray_IsAnEmptyArray()
     {
         Assert.Equal("[]", Run("$source([]).$map($index())"));
+    }
+
+    // ------------------------------------------------------------------
+    // Execution: the base plus a position must fit in int
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void IndexOverflowInMap_IsNumberOutOfRange_AndPointsAtTheIndexCall()
+    {
+        var error = QueryAssert.Fails(
+            QueryErrorCode.NumberOutOfRange,
+            27,
+            18,
+            () => Engine.Execute("$source([10, 20, 30]).$map($index(2147483647))"));
+
+        Assert.Contains("int range", error.Message);
+    }
+
+    [Fact]
+    public void IndexOverflowInFilter_IsNumberOutOfRange()
+    {
+        QueryAssert.Fails(
+            QueryErrorCode.NumberOutOfRange,
+            () => Engine.Execute("$source([10, 20, 30]).$filter($index(2147483647) gt 0)"));
+    }
+
+    [Fact]
+    public void IndexAtTheHighestBaseThatStillFits_Works()
+    {
+        // The last element sits exactly at int.MaxValue; one more element would overflow.
+        Assert.Equal(
+            "[2147483646,2147483647]",
+            Run("$source([1, 2]).$map($index(2147483646))"));
+    }
+
+    [Fact]
+    public void IndexOverflowDependsOnPosition_NotOnTheBaseAlone()
+    {
+        // A base of int.MaxValue is fine for a single element (position 0) and only
+        // overflows once a position is added to it.
+        Assert.Equal("[2147483647]", Run("$source([1]).$map($index(2147483647))"));
     }
 }

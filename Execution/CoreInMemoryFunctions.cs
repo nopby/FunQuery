@@ -29,11 +29,39 @@ internal static class CoreInMemoryFunctions
 
         if (call.Arguments.Count == 1)
         {
+            // Analyzer sudah memastikan bentuknya int literal atau @variable. Literal dan
+            // variable sama-sama dibaca sekali di sini (bukan per elemen). Variable yang
+            // ternyata bukan int — analyzer bisa saja hanya melihat tipenya yang dideklarasikan
+            // — ditolak sebagai TYPE_MISMATCH, bukan cast mentah yang melempar InvalidCast.
             var baseFn = compiler.Compile(call.Arguments[0]);
-            baseValue = (int)baseFn(null)!;
+
+            baseValue = baseFn(null) switch
+            {
+                int value => value,
+                _ => throw new QueryException(
+                    QueryErrorCode.TypeMismatch,
+                    "The variable given to '$index' must resolve to an int base.",
+                    call.Arguments[0].Span),
+            };
         }
 
-        return _ => cell.Value + baseValue;
+        return _ =>
+        {
+            // Posisi + base tidak boleh diam-diam wrap: overflow menjadi error yang bisa
+            // dilaporkan, dengan span pemanggilan $index ini sendiri.
+            try
+            {
+                return checked(cell.Value + baseValue);
+            }
+            catch (OverflowException)
+            {
+                throw new QueryException(
+                    QueryErrorCode.NumberOutOfRange,
+                    "$index() overflowed: the element position plus the base does not fit " +
+                    "in the int range.",
+                    call.Span);
+            }
+        };
     }
 
 
@@ -126,7 +154,12 @@ internal static class CoreInMemoryFunctions
         };
     }
 
-    /// <summary>$filter(predicate): menyaring elemen. Predikat dihitung terhadap tiap elemen.</summary>
+    /// <summary>
+    /// $filter(predicate): menyaring elemen. Predikat dihitung terhadap tiap elemen.
+    /// Hasilnya dimaterialisasi, sama seperti $take/$skip/$sort: setiap nilai array di runtime
+    /// adalah IReadOnlyList&lt;object?&gt;, jadi $distinct membandingkannya secara struktural
+    /// dan $let menyimpan nilai (bukan query yang dievaluasi ulang). Lihat docs/Functions.md.
+    /// </summary>
     public static Func<object?, object?> Filter(InMemoryCompiler compiler, CallExpression call)
     {
         var target = compiler.Compile(
@@ -141,7 +174,7 @@ internal static class CoreInMemoryFunctions
         return element => FilterSequence(
             target(element) as IEnumerable<object?> ?? [],
             predicate,
-            cell);
+            cell).ToList();
     }
 
     private static IEnumerable<object?> FilterSequence(
@@ -160,7 +193,8 @@ internal static class CoreInMemoryFunctions
         }
     }
 
-    /// <summary>$map(expression): memproyeksikan setiap elemen lewat satu ekspresi.</summary>
+    /// <summary>$map(expression): memproyeksikan setiap elemen lewat satu ekspresi.
+    /// Hasilnya dimaterialisasi seperti $filter (lihat catatan di sana).</summary>
     public static Func<object?, object?> Map(InMemoryCompiler compiler, CallExpression call)
     {
         var target = compiler.Compile(
@@ -172,7 +206,8 @@ internal static class CoreInMemoryFunctions
 
         var (projector, cell) = compiler.CompileIndexed(call.Arguments[0]);
 
-        return element => Project(target(element) as IEnumerable<object?> ?? [], projector, cell);
+        return element => Project(target(element) as IEnumerable<object?> ?? [], projector, cell)
+            .ToList();
     }
 
     /// <summary>
@@ -199,7 +234,8 @@ internal static class CoreInMemoryFunctions
             ? compiler.CompileIndexed(call.Arguments[0])
             : CompileFieldList(compiler, call.Arguments);
 
-        return element => Project(target(element) as IEnumerable<object?> ?? [], projector, cell);
+        return element => Project(target(element) as IEnumerable<object?> ?? [], projector, cell)
+            .ToList();
     }
 
     private static (Func<object?, object?> Projector, IndexCell Cell) CompileFieldList(

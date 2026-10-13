@@ -312,4 +312,32 @@ public class SelectAndMapTests
             """[{"id":1,"dyn":"a"}]""",
             Run("$let(@col, 'name').$source([{id: 1, name: 'a'}]).$select({id: id, dyn: $field(@col)})"));
     }
+
+    // ------------------------------------------------------------------
+    // Execution: every array value is a materialized IReadOnlyList
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void AProjectedSubArray_IsAlwaysAMaterializedList()
+    {
+        // The language invariant: at runtime every array value is an IReadOnlyList<object?>.
+        // A lazy iterator serializes the same way but compares by reference in $distinct.
+        var result = Engine.Execute("$source([1]).$map($source([1, 2, 3]).$filter(~ gt 1))");
+
+        var rows = Assert.IsType<List<object?>>(result.Value);
+
+        Assert.Equal("[[2,3]]", result.ToJson());
+        Assert.IsAssignableFrom<IReadOnlyList<object?>>(Assert.Single(rows));
+    }
+
+    [Fact]
+    public void ASelectedSubArray_IsAlwaysAMaterializedList()
+    {
+        var result = Engine.Execute("$source([1]).$map($source([{a: 1}, {a: 2}]).$select(a))");
+
+        var rows = Assert.IsType<List<object?>>(result.Value);
+
+        Assert.Equal("""[[{"a":1},{"a":2}]]""", result.ToJson());
+        Assert.IsAssignableFrom<IReadOnlyList<object?>>(Assert.Single(rows));
+    }
 }

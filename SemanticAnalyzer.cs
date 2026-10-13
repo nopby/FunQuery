@@ -877,10 +877,24 @@ public static class SemanticAnalyzer
 
         if (expression.Arguments.Count == 1)
         {
-            Analyze(expression.Arguments[0], context);
+            var argument = expression.Arguments[0];
+
+            // Bentuknya diperiksa lebih dulu, sama seperti $field: base hanya boleh literal
+            // (int) atau @variable. Bentuk lain — field, ~, pemanggilan function, chain —
+            // belum punya nilai sebelum elemen pertama ada, jadi tidak mungkin menjadi base;
+            // dulu bentuk seperti itu lolos ke runtime dan berakhir NullReferenceException.
+            // Karena bentuk diperiksa dulu, $index(1.5) tetap TYPE_MISMATCH di bawah.
+            if (argument is not (ValueExpression or VariableExpression))
+                throw new QueryException(
+                    QueryErrorCode.InvalidIndexArgument,
+                    "The argument of '$index' must be an int literal or a variable, " +
+                    "e.g. $index(1) or $index(@offset).",
+                    argument.Span);
+
+            Analyze(argument, context);
 
             var baseType =
-                expression.Arguments[0].SemanticType
+                argument.SemanticType
                 ?? throw new QueryException(
                     QueryErrorCode.InternalError,
                     "$index's base argument has no semantic type.");
@@ -889,7 +903,7 @@ public static class SemanticAnalyzer
                 throw new QueryException(
                     QueryErrorCode.TypeMismatch,
                     $"Argument 1 of '$index' expects int, got {baseType.Name}.",
-                    expression.Arguments[0].Span);
+                    argument.Span);
         }
 
         expression.SemanticType = SemanticTypeOptions.Int;

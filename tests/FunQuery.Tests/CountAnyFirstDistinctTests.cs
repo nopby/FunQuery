@@ -248,6 +248,43 @@ public class CountAnyFirstDistinctTests
     }
 
     [Fact]
+    public void DistinctSeesFilteredSubArraysAsValues_NotAsLazyIterators()
+    {
+        // Each row builds the same sub-array. A lazy $filter/$map/$select compares by
+        // reference here (and the JSON writer enumerates each row separately), so the
+        // duplicate survived: [[2,3],[2,3]].
+        Assert.Equal(
+            "[[2,3]]",
+            Run("$source([1, 2]).$map($source([1, 2, 3]).$filter(~ gt 1)).$distinct()"));
+    }
+
+    [Fact]
+    public void DistinctSeesMappedSubArraysAsValues_NotAsLazyIterators()
+    {
+        Assert.Equal(
+            "[[1,2,3]]",
+            Run("$source([1, 2]).$map($source([1, 2, 3]).$map(~)).$distinct()"));
+    }
+
+    [Fact]
+    public void DistinctSeesSelectedSubArraysAsValues_NotAsLazyIterators()
+    {
+        Assert.Equal(
+            """[[{"a":1},{"a":2}]]""",
+            Run("$source([1, 2]).$map($source([{a: 1}, {a: 2}]).$select(a)).$distinct()"));
+    }
+
+    [Fact]
+    public void DistinctSeesSortedSubArraysAsValues_ControlCase()
+    {
+        // $sort already materialized its result, which is why sorting hid the bug: this
+        // chain deduped correctly even before $filter/$map/$select were fixed.
+        Assert.Equal(
+            "[[1,3]]",
+            Run("$source([1, 2]).$map($source([1, 2, 3]).$filter(~ neq 2).$sort(~)).$distinct()"));
+    }
+
+    [Fact]
     public void DistinctCanBeChainedWithOtherFunctions()
     {
         Assert.Equal(

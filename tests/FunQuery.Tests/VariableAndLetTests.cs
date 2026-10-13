@@ -356,4 +356,28 @@ public class VariableAndLetTests
             """[{"n":null}]""",
             Run("$let(@x, null).$source([{n: 1}, {n: null}]).$filter(n eq @x)"));
     }
+
+    // ------------------------------------------------------------------
+    // Execution: a $let value is materialized, never a query that re-runs
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void ALetsValueThatIsASubChain_HoldsAMaterializedList()
+    {
+        var result = Engine.Execute("$let(@x, $source([1, 2, 3]).$filter(~ gt 1)).$source([@x])");
+
+        var rows = Assert.IsType<List<object?>>(result.Value);
+
+        Assert.IsAssignableFrom<IReadOnlyList<object?>>(Assert.Single(rows));
+    }
+
+    [Fact]
+    public void ALetsValueThatIsASubChain_BehavesAsOneValue_NotAsTwoRewrites()
+    {
+        // @x is read twice in the same array. With a lazy iterator the two rows were
+        // compared by reference and both survived; a materialized value dedupes structurally.
+        Assert.Equal(
+            "[[2,3]]",
+            Run("$let(@x, $source([1, 2, 3]).$filter(~ gt 1)).$source([@x, @x]).$distinct()"));
+    }
 }
