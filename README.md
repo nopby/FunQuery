@@ -102,7 +102,7 @@ The roadmap is divided into vertical milestones. Each milestone has a concrete d
 | 3         | Completing the language  | ✅      |
 | 4         | Function set v1          | ✅     |
 | 5         | ASP.NET Core integration | ✅     |
-| 6         | Providers                | ⏳      |
+| 6         | Providers (PostgreSQL)   | ✅     |
 
 See [`docs/Milestones.md`](docs/Milestones.md) for the detailed roadmap.
 
@@ -209,7 +209,7 @@ dotnet publish hosts/FunQuery.Server -c Release -r win-x64
 
 Run the published binary from its output directory so `wwwroot` and `appsettings.json` are found.
 
-### PostgreSQL host (M6.3–M6.5)
+### PostgreSQL host
 
 The SQL host executes registered PostgreSQL sources through the same GET/POST API, alongside an
 in-memory source:
@@ -231,7 +231,9 @@ The sample expects an `orders` table with `id integer`, `customer text`, `total 
 dotnet publish hosts/FunQuery.PostgreSql.Server -c Release -r win-x64
 ```
 
-M6.3–M6.5 are implemented; M6.6 remains the documentation and close-out pass.
+M6.3–M6.6 are implemented; Milestone 6 is complete for PostgreSQL. Other SQL dialects remain future
+work. See [`docs/PostgreSql.md`](docs/PostgreSql.md) for registration, the supported subset, and the
+limitations matrix.
 
 See [`docs/Milestone6.md`](docs/Milestone6.md) for the staged plan,
 [`docs/HttpApi.md`](docs/HttpApi.md) for the GET/POST endpoints, variables, limits, security, and error

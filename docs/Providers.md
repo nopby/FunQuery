@@ -2,6 +2,9 @@
 
 This document records the provider architecture decision for Milestone 6.
 
+**Status:** PostgreSQL is the first implemented SQL provider; see [`PostgreSql.md`](PostgreSql.md).
+Additional SQL dialects (SQL Server, MySQL, SQLite) are future work. The LINQ provider remains optional.
+
 ## Decision
 
 * **One SQL provider, multiple dialects.** The query engine, plan, parameterization, null semantics, and

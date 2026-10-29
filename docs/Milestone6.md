@@ -30,7 +30,7 @@ one starts.
 | M6.3  | PostgreSQL execution and sources           | M6.2       | L    | ✅     |
 | M6.4  | Semantic parity and capability enforcement | M6.3       | M    | ✅     |
 | M6.5  | HTTP integration and hardening             | M6.4       | M    | ✅     |
-| M6.6  | Documentation and close-out                | M6.1–M6.5  | S    | ⏳     |
+| M6.6  | Documentation and close-out                | M6.1–M6.5  | S    | ✅     |
 
 ---
 
@@ -337,14 +337,27 @@ one starts.
 * The supported subset is documented and covered by parity tests.
 * A user can register a PostgreSQL source and query it from the HTTP host.
 
+### Result
+
+* [`PostgreSql.md`](PostgreSql.md) documents registration, schema mapping, the supported/unsupported
+  matrix, null/order semantics, parameters/security, limits, testing, AOT, and troubleshooting.
+* README marks Milestone 6 complete for PostgreSQL; `Providers.md` and `Milestones.md` link the provider
+  documentation.
+* Final verification: 1149 tests green against PostgreSQL 18, including golden SQL, unit, integration,
+  parity, and HTTP tests. The Native AOT PostgreSQL host was smoke-tested for GET, POST, and the
+  in-memory source.
+* Milestone 6 is complete for PostgreSQL. Additional SQL dialects remain future work.
+
 ---
 
-## Open decisions
+## Decisions (as implemented)
 
-1. **Source/provider selection shape.** Whether `IQuerySource` gains a provider key, or a separate
-   `ISqlSource`/`IQueryExecutor` registry is used. M6.1 decides; M6.3 implements.
-2. **Pagination without `$sort`.** Proposed: reject. Alternative: order by a schema-declared key.
-3. **`$distinct(key)` row choice.** Proposed: `DISTINCT ON` with unspecified order, documented.
-4. **JSON projection.** Whether `$select({...})` maps to `jsonb_build_object` in v1 or is a capability
-   limitation until later.
-5. **Npgsql AOT.** Whether the SQL host is AOT-published; Npgsql support is assessed in M6.5.
+1. **Source/provider selection:** `IQuerySource.Executor` plus `AsQuerySource(...)`; sources without an
+   executor keep the in-memory path.
+2. **Pagination without `$sort`:** rejected with `ORDER_REQUIRED`.
+3. **`$distinct(key)`:** `DISTINCT ON`; order after `$distinct` is unspecified unless followed by
+   `$sort`.
+4. **JSON projection:** not supported in v1; the PostgreSQL dialect omits the `JsonProjection`
+   capability.
+5. **Npgsql AOT:** the PostgreSQL host publishes with Native AOT and was smoke-tested against
+   PostgreSQL 18.

@@ -493,7 +493,8 @@ The HTTP integration must enforce limits for:
 **Goal:** execute the same semantic query against external data providers.
 
 The staged work plan for this milestone is in [`Milestone6.md`](Milestone6.md); the provider architecture
-decision is in [`Providers.md`](Providers.md).
+decision is in [`Providers.md`](Providers.md). PostgreSQL is the first implemented provider; see
+[`PostgreSql.md`](PostgreSql.md). Additional SQL dialects remain future work.
 
 ## Provider Abstraction
 
