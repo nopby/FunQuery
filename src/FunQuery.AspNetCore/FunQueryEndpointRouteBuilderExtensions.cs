@@ -145,7 +145,7 @@ public static class FunQueryEndpointRouteBuilderExtensions
         }
 
         return Results.Text(
-            engine.ExecutePlan(plan, valueEnvironment).ToJson(),
+            engine.ExecutePlan(plan, valueEnvironment, context.RequestAborted).ToJson(),
             "application/json",
             Encoding.UTF8);
     }

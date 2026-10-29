@@ -32,7 +32,7 @@ public sealed class QueryEngine
         _functions = (functions ?? new FunctionRegistry().AddExtension(new CoreFunctions()))
             .Freeze();
 
-        _interpreter = new InMemoryInterpreter(implementations);
+        _interpreter = new InMemoryInterpreter(implementations, Limits);
     }
 
     public QueryLimits Limits { get; }
@@ -41,8 +41,11 @@ public sealed class QueryEngine
     /// Menjalankan <paramref name="query"/> dengan parameter dari <paramref name="environment"/>.
     /// Semua kesalahan input dilaporkan sebagai <see cref="QueryException"/> dengan kode dan posisi.
     /// </summary>
-    public QueryResult Execute(string query, QueryEnvironment? environment = null) =>
-        ExecutePlan(Prepare(query, environment), environment);
+    public QueryResult Execute(
+        string query,
+        QueryEnvironment? environment = null,
+        CancellationToken cancellationToken = default) =>
+        ExecutePlan(Prepare(query, environment), environment, cancellationToken);
 
     /// <summary>
     /// Melakukan lex, parse, dan analisis tanpa mengeksekusi query. Tipe parameter diambil dari
@@ -75,7 +78,10 @@ public sealed class QueryEngine
     /// Menjalankan query yang sudah disiapkan. <paramref name="environment"/> harus berisi tipe
     /// yang sama dengan yang dipakai saat <see cref="Prepare"/>; hanya nilainya yang dibaca di sini.
     /// </summary>
-    public QueryResult ExecutePlan(QueryPlan plan, QueryEnvironment? environment = null)
+    public QueryResult ExecutePlan(
+        QueryPlan plan,
+        QueryEnvironment? environment = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(plan);
         environment ??= QueryEnvironment.Empty;
@@ -87,7 +93,11 @@ public sealed class QueryEngine
         foreach (var (name, parameter) in environment.Parameters)
             values[name] = parameter.Value;
 
-        var value = _interpreter.Execute(plan.Expression, plan.Query.AsMemory(), values);
+        var value = _interpreter.Execute(
+            plan.Expression,
+            plan.Query.AsMemory(),
+            values,
+            cancellationToken);
 
         return new QueryResult(
             plan.Expression.SemanticType

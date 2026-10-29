@@ -21,6 +21,7 @@ public sealed class InMemoryCompiler
 
     private readonly ReadOnlyMemory<char> _source;
     private readonly InMemoryFunctions _functions;
+    private readonly ExecutionGuard? _guard;
 
     // Nilai variable saat kompilasi. Dictionary datar, sama seperti tipe variable di analyzer;
     // bertambah lewat $let, dan snapshot/restore menjaga scope tetap lexical ke depan.
@@ -35,14 +36,19 @@ public sealed class InMemoryCompiler
     internal InMemoryCompiler(
         ReadOnlyMemory<char> source,
         InMemoryFunctions functions,
-        IReadOnlyDictionary<string, object?>? variables = null)
+        IReadOnlyDictionary<string, object?>? variables = null,
+        ExecutionGuard? guard = null)
     {
         _source = source;
         _functions = functions;
+        _guard = guard;
         _variables = variables is null
             ? new Dictionary<string, object?>(StringComparer.Ordinal)
             : new Dictionary<string, object?>(variables, StringComparer.Ordinal);
     }
+
+    /// <summary>Pemeriksaan batas waktu/pembatalan untuk loop dan function call.</summary>
+    internal void Step() => _guard?.Step();
 
     // ------------------------------------------------------------------
     // $index()
@@ -389,6 +395,16 @@ public sealed class InMemoryCompiler
                 call.Function);
         }
 
-        return implementation(this, call);
+        var compiled = implementation(this, call);
+        var guard = _guard;
+
+        if (guard is null)
+            return compiled;
+
+        return element =>
+        {
+            guard.Step();
+            return compiled(element);
+        };
     }
 }

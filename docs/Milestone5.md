@@ -46,7 +46,7 @@ into `FunQuery.dll`.
 | M5.3  | Typed parameters, source registry, schema | M5.1     | L    | ✅     |
 | M5.4  | Query variables (GET)                   | M5.3       | M    | ✅     |
 | M5.5  | POST endpoint and request contract      | M5.4       | S    | ✅     |
-| M5.6  | Execution limits and cancellation       | M5.3       | M    | ⏳     |
+| M5.6  | Execution limits and cancellation       | M5.3       | M    | ✅     |
 | M5.7  | Hardening, docs, and milestone close-out | M5.1–M5.6 | M    | ⏳     |
 
 ---
@@ -298,12 +298,13 @@ This is the largest stage: it adds the only new core API in M5 and the security 
   * `MaxResultItems` (default 10 000);
   * `MaxSourceItems` already exists from M5.3 and stays enforced while loading;
   * keep `MaxInputLength`, `MaxTokens`, `MaxDepth`.
-* Thread a per-execution context (deadline + `CancellationToken`) through the interpreter. Check it:
-  * at every function step;
-  * inside `$filter`, `$map`, `$select`, `$sort`, `$any`, `$first`, `$distinct` loops (every element, or
-    every 256 elements if the stopwatch read shows up in profiles).
+* Thread a per-execution `ExecutionGuard` (deadline + `CancellationToken`) through the interpreter.
+  Check it:
+  * at every function call;
+  * inside `$filter`, `$map`, `$select`, `$sort`, `$any`, `$first`, `$distinct` loops, once per element.
 * Timeout → `EXECUTION_TIMEOUT`; result over the limit → `RESULT_TOO_LARGE`. Both are new stable codes;
   `SOURCE_TOO_LARGE` already exists from M5.3.
+* The result limit applies to the top-level array; scalar results such as `$count()` are not affected.
 * Client disconnect (`RequestAborted`) stops the query with `OperationCanceledException`; it is not
   reported as a query error.
 * Result limit is an **error**, never silent truncation: a truncated result is a wrong result.
@@ -318,9 +319,11 @@ This is the largest stage: it adds the only new core API in M5 and the security 
 ### Tests
 
 * A query that exceeds `MaxExecutionTime` (for example a large `$map` over many rows) → `408`.
-* A result over `MaxResultItems` → `422 RESULT_TOO_LARGE`; a result exactly at the limit succeeds.
+* A result over `MaxResultItems` → `422 RESULT_TOO_LARGE`; a result exactly at the limit succeeds;
+  a scalar result is unaffected; an empty array is allowed at a zero limit.
 * A source over `MaxSourceItems` → `422 SOURCE_TOO_LARGE`.
 * Cancelling the request stops execution promptly and does not write a response.
+* A cancelled `CancellationToken` at the engine level throws `OperationCanceledException`.
 * Existing limit tests (`INPUT_TOO_LONG`, `MAX_DEPTH_EXCEEDED`, `TOO_MANY_TOKENS`) still pass and map to
   their documented status.
 

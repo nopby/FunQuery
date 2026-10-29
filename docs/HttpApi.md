@@ -1,8 +1,8 @@
 # FunQuery HTTP API
 
 This document specifies the HTTP surface of the ASP.NET Core adapter. It currently covers Milestone
-5.1–5.5 (GET, POST, the error contract, registered sources, and query variables); execution limits are
-added in the last stage of [`Milestone5.md`](Milestone5.md).
+5.1–5.6 (GET, POST, the error contract, registered sources, query variables, and execution limits);
+the final hardening and documentation pass is M5.7 in [`Milestone5.md`](Milestone5.md).
 
 ## GET /query
 
@@ -155,8 +155,8 @@ unhandled error can never leak an exception type or a stack trace.
 | `400` | `INVALID_REQUEST`, `UNKNOWN_SOURCE`, `INVALID_PARAMETER` | The request is malformed |
 | `413` | `INPUT_TOO_LONG`, `REQUEST_TOO_LARGE` | The query string or request body is too large |
 | `415` | `UNSUPPORTED_MEDIA_TYPE` | A POST body was sent with a non-JSON content type |
-| `408` | `EXECUTION_TIMEOUT` | The query exceeded its time budget (M5.6) |
-| `422` | `RESULT_TOO_LARGE`, `SOURCE_TOO_LARGE` | The query is valid but its result or source is too large (source limit in M5.3, result limit in M5.6) |
+| `408` | `EXECUTION_TIMEOUT` | The query exceeded its time budget |
+| `422` | `RESULT_TOO_LARGE`, `SOURCE_TOO_LARGE` | The query is valid but its result or source is too large |
 | `500` | `INTERNAL_ERROR` | A bug in the server, not in the request |
 
 Codes marked with a stage are part of the contract already; the stage that raises them is noted so the
@@ -176,6 +176,17 @@ policy can replace the endpoint filter, but the default is part of the API contr
 | `MaxParameters` | 32 | `INVALID_PARAMETER` (`400`) |
 | `MaxParameterValueLength` | 1024 characters | `INVALID_PARAMETER` (`400`) |
 | `MaxRequestBodyBytes` | 64 KB (option, not a query limit) | `REQUEST_TOO_LARGE` (`413`) |
+| `MaxExecutionTime` | 2 seconds | `EXECUTION_TIMEOUT` (`408`) |
+| `MaxResultItems` | 10 000 items | `RESULT_TOO_LARGE` (`422`) |
+
+`MaxExecutionTime` is **cooperative**: it is checked between elements and at every function call, not
+by aborting a thread. A single long comparison or sort may therefore overshoot the deadline slightly,
+but a query that keeps working is stopped at the next check. A client that disconnects sets
+`RequestAborted`; execution stops and no response is written.
+
+`MaxResultItems` applies to the **top-level array** of the result. Scalar results such as `$count()` or
+`$first()` are not affected, and an empty array is always allowed. Exceeding the limit is an error, never
+a silent truncation.
 
 Set them at startup:
 
@@ -189,6 +200,8 @@ builder.Services.AddFunQuery(options =>
         MaxDepth = 32,
         MaxParameters = 16,
         MaxParameterValueLength = 512,
+        MaxExecutionTime = TimeSpan.FromSeconds(1),
+        MaxResultItems = 5000,
     };
 });
 ```
@@ -197,7 +210,6 @@ Time and result-size limits arrive in M5.6.
 
 ## Not yet available
 
-* Execution timeout and result-size limits — M5.6.
 * OpenAPI document — M5.7, optional.
 
 ## Host setup

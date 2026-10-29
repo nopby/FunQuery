@@ -174,18 +174,21 @@ internal static class CoreInMemoryFunctions
         return element => FilterSequence(
             target(element) as IEnumerable<object?> ?? [],
             predicate,
-            cell).ToList();
+            cell,
+            compiler.Step).ToList();
     }
 
     private static IEnumerable<object?> FilterSequence(
         IEnumerable<object?> items,
         Func<object?, object?> predicate,
-        IndexCell cell)
+        IndexCell cell,
+        Action step)
     {
         int index = 0;
 
         foreach (var item in items)
         {
+            step();
             cell.Value = index++;
 
             if (ValueOperations.IsTrue(predicate(item)))
@@ -206,7 +209,7 @@ internal static class CoreInMemoryFunctions
 
         var (projector, cell) = compiler.CompileIndexed(call.Arguments[0]);
 
-        return element => Project(target(element) as IEnumerable<object?> ?? [], projector, cell)
+        return element => Project(target(element) as IEnumerable<object?> ?? [], projector, cell, compiler.Step)
             .ToList();
     }
 
@@ -234,7 +237,7 @@ internal static class CoreInMemoryFunctions
             ? compiler.CompileIndexed(call.Arguments[0])
             : CompileFieldList(compiler, call.Arguments);
 
-        return element => Project(target(element) as IEnumerable<object?> ?? [], projector, cell)
+        return element => Project(target(element) as IEnumerable<object?> ?? [], projector, cell, compiler.Step)
             .ToList();
     }
 
@@ -277,12 +280,14 @@ internal static class CoreInMemoryFunctions
     private static IEnumerable<object?> Project(
         IEnumerable<object?> items,
         Func<object?, object?> projector,
-        IndexCell cell)
+        IndexCell cell,
+        Action step)
     {
         int index = 0;
 
         foreach (var item in items)
         {
+            step();
             cell.Value = index++;
             yield return projector(item);
         }
@@ -311,11 +316,13 @@ internal static class CoreInMemoryFunctions
 
         return element =>
         {
+            compiler.Step();
             var items = (target(element) as IEnumerable<object?> ?? []).ToList();
             var entries = new (object? Item, bool IsNull, object? Value, int Index)[items.Count];
 
             for (int i = 0; i < items.Count; i++)
             {
+                compiler.Step();
                 // $index() di dalam key $sort merujuk posisi sebelum pengurutan.
                 cell.Value = i;
                 var value = key(items[i]);
@@ -323,6 +330,7 @@ internal static class CoreInMemoryFunctions
             }
 
             Array.Sort(entries, (a, b) => CompareSortKeys(a, b, descending));
+            compiler.Step();
 
             var result = new List<object?>(entries.Length);
 
@@ -367,9 +375,14 @@ internal static class CoreInMemoryFunctions
 
         var count = compiler.Compile(call.Arguments[0]);
 
-        return element => (target(element) as IEnumerable<object?> ?? [])
-            .Take(ToInt32(count(element)))
-            .ToList();
+        return element =>
+        {
+            compiler.Step();
+
+            return (target(element) as IEnumerable<object?> ?? [])
+                .Take(ToInt32(count(element)))
+                .ToList();
+        };
     }
 
     /// <summary>$skip(count): melewati sejumlah elemen pertama. Sejalan dengan LINQ, count
@@ -385,9 +398,14 @@ internal static class CoreInMemoryFunctions
 
         var count = compiler.Compile(call.Arguments[0]);
 
-        return element => (target(element) as IEnumerable<object?> ?? [])
-            .Skip(ToInt32(count(element)))
-            .ToList();
+        return element =>
+        {
+            compiler.Step();
+
+            return (target(element) as IEnumerable<object?> ?? [])
+                .Skip(ToInt32(count(element)))
+                .ToList();
+        };
     }
 
     /// <summary>$count(): jumlah elemen sebagai long.</summary>
@@ -395,11 +413,16 @@ internal static class CoreInMemoryFunctions
     {
         var target = TargetOf(compiler, call);
 
-        return element => target(element) switch
+        return element =>
         {
-            IReadOnlyCollection<object?> collection => (long)collection.Count,
-            IEnumerable<object?> sequence => (long)sequence.Count(),
-            _ => 0L,
+            compiler.Step();
+
+            return target(element) switch
+            {
+                IReadOnlyCollection<object?> collection => (long)collection.Count,
+                IEnumerable<object?> sequence => (long)sequence.Count(),
+                _ => 0L,
+            };
         };
     }
 
@@ -415,6 +438,8 @@ internal static class CoreInMemoryFunctions
 
             foreach (var item in target(element) as IEnumerable<object?> ?? [])
             {
+                compiler.Step();
+
                 if (cell is not null)
                     cell.Value = index++;
 
@@ -438,6 +463,8 @@ internal static class CoreInMemoryFunctions
 
             foreach (var item in target(element) as IEnumerable<object?> ?? [])
             {
+                compiler.Step();
+
                 if (cell is not null)
                     cell.Value = index++;
 
@@ -479,6 +506,8 @@ internal static class CoreInMemoryFunctions
 
             foreach (var item in target(element) as IEnumerable<object?> ?? [])
             {
+                compiler.Step();
+
                 if (cell is not null)
                     cell.Value = index++;
 

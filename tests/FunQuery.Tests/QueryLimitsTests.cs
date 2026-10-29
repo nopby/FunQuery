@@ -13,6 +13,8 @@ public class QueryLimitsTests
         Assert.Equal(100_000, limits.MaxSourceItems);
         Assert.Equal(32, limits.MaxParameters);
         Assert.Equal(1024, limits.MaxParameterValueLength);
+        Assert.Equal(TimeSpan.FromSeconds(2), limits.MaxExecutionTime);
+        Assert.Equal(10_000, limits.MaxResultItems);
     }
 
     [Fact]
@@ -95,5 +97,24 @@ public class QueryLimitsTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new QueryLimits { MaxParameterValueLength = value });
+    }
+
+    [Fact]
+    public void MaxExecutionTime_MustBePositive()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new QueryLimits { MaxExecutionTime = TimeSpan.Zero });
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new QueryLimits { MaxExecutionTime = TimeSpan.FromTicks(-1) });
+    }
+
+    [Fact]
+    public void MaxResultItems_MayBeZeroButNotNegative()
+    {
+        Assert.Equal(0, new QueryLimits { MaxResultItems = 0 }.MaxResultItems);
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new QueryLimits { MaxResultItems = -1 });
     }
 }

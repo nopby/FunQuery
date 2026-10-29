@@ -22,6 +22,8 @@ public sealed class QueryLimits
     private int _maxSourceItems = 100_000;
     private int _maxParameters = 32;
     private int _maxParameterValueLength = 1024;
+    private TimeSpan _maxExecutionTime = TimeSpan.FromSeconds(2);
+    private int _maxResultItems = 10_000;
 
     /// <summary>Instance bersama dengan semua nilai default.</summary>
     public static QueryLimits Default { get; } = new();
@@ -99,6 +101,45 @@ public sealed class QueryLimits
     {
         get => _maxParameterValueLength;
         init => _maxParameterValueLength = AtLeastOne(value, nameof(MaxParameterValueLength));
+    }
+
+    /// <summary>
+    /// Batas waktu eksekusi satu query. Default 2 detik. Pemeriksaan bersifat kooperatif: dilakukan
+    /// di antara elemen dan di setiap pemanggilan function, bukan dengan menghentikan thread paksa.
+    /// </summary>
+    public TimeSpan MaxExecutionTime
+    {
+        get => _maxExecutionTime;
+        init
+        {
+            if (value <= TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(
+                    nameof(MaxExecutionTime),
+                    value,
+                    $"{nameof(MaxExecutionTime)} must be positive.");
+
+            _maxExecutionTime = value;
+        }
+    }
+
+    /// <summary>
+    /// Jumlah item maksimum pada hasil array. Default 10.000; 0 berarti hanya array kosong yang
+    /// boleh. Melebihi batas ini adalah <c>RESULT_TOO_LARGE</c>, bukan pemotongan diam-diam.
+    /// Hasil scalar (mis. <c>$count()</c>) tidak terkena batas ini.
+    /// </summary>
+    public int MaxResultItems
+    {
+        get => _maxResultItems;
+        init
+        {
+            if (value < 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(MaxResultItems),
+                    value,
+                    $"{nameof(MaxResultItems)} must not be negative.");
+
+            _maxResultItems = value;
+        }
     }
 
     private static int AtLeastOne(int value, string name)
