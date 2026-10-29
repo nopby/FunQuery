@@ -38,25 +38,59 @@ public sealed class QueryEngine
     public QueryLimits Limits { get; }
 
     /// <summary>
-    /// Menjalankan <paramref name="query"/>. Semua kesalahan input dilaporkan sebagai
-    /// <see cref="QueryException"/> dengan kode dan posisi.
+    /// Menjalankan <paramref name="query"/> dengan parameter dari <paramref name="environment"/>.
+    /// Semua kesalahan input dilaporkan sebagai <see cref="QueryException"/> dengan kode dan posisi.
     /// </summary>
-    public QueryResult Execute(string query)
+    public QueryResult Execute(string query, QueryEnvironment? environment = null) =>
+        ExecutePlan(Prepare(query, environment), environment);
+
+    /// <summary>
+    /// Melakukan lex, parse, dan analisis tanpa mengeksekusi query. Tipe parameter diambil dari
+    /// <paramref name="environment"/>; nilainya tidak dipakai di tahap ini.
+    /// </summary>
+    public QueryPlan Prepare(string query, QueryEnvironment? environment = null)
     {
         ArgumentNullException.ThrowIfNull(query);
+        environment ??= QueryEnvironment.Empty;
 
         using var buffer = new TokenBuffer(limits: Limits);
         Lexer.Tokenize(buffer, query);
 
         var parsed = Parser.Parse(query, buffer.Span, Limits);
 
-        var context = new SemanticContext(query.AsMemory(), _functions, Limits);
+        var types = new Dictionary<string, SemanticType>(
+            environment.Parameters.Count,
+            StringComparer.Ordinal);
+
+        foreach (var (name, parameter) in environment.Parameters)
+            types[name] = parameter.Type;
+
+        var context = new SemanticContext(query.AsMemory(), _functions, Limits, types);
         var analyzed = SemanticAnalyzer.Analyze(parsed, context);
 
-        var value = _interpreter.Execute(analyzed, query.AsMemory());
+        return new QueryPlan(query, analyzed);
+    }
+
+    /// <summary>
+    /// Menjalankan query yang sudah disiapkan. <paramref name="environment"/> harus berisi tipe
+    /// yang sama dengan yang dipakai saat <see cref="Prepare"/>; hanya nilainya yang dibaca di sini.
+    /// </summary>
+    public QueryResult ExecutePlan(QueryPlan plan, QueryEnvironment? environment = null)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        environment ??= QueryEnvironment.Empty;
+
+        var values = new Dictionary<string, object?>(
+            environment.Parameters.Count,
+            StringComparer.Ordinal);
+
+        foreach (var (name, parameter) in environment.Parameters)
+            values[name] = parameter.Value;
+
+        var value = _interpreter.Execute(plan.Expression, plan.Query.AsMemory(), values);
 
         return new QueryResult(
-            analyzed.SemanticType
+            plan.Expression.SemanticType
                 ?? throw new QueryException(
                     QueryErrorCode.InternalError,
                     "The analyzed query has no semantic type."),

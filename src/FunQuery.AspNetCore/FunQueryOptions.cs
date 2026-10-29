@@ -13,6 +13,12 @@ public sealed class FunQueryOptions
     public string QueryParameter { get; set; } = "q";
 
     /// <summary>
+    /// Nama query parameter yang memilih source terdaftar, default <c>source</c>. Source yang
+    /// dipilih selalu diikat ke variable <c>@source</c>.
+    /// </summary>
+    public string SourceParameter { get; set; } = "source";
+
+    /// <summary>
     /// Batas yang dipakai <see cref="QueryEngine"/> untuk setiap request. Default
     /// <see cref="QueryLimits.Default"/> (input 2048 karakter, 1024 token, kedalaman 64).
     /// </summary>
@@ -29,6 +35,11 @@ public sealed class FunQueryOptions
             throw new ArgumentException(
                 $"{nameof(QueryParameter)} must not be empty.",
                 nameof(QueryParameter));
+
+        if (string.IsNullOrWhiteSpace(SourceParameter))
+            throw new ArgumentException(
+                $"{nameof(SourceParameter)} must not be empty.",
+                nameof(SourceParameter));
 
         ArgumentNullException.ThrowIfNull(Limits, nameof(Limits));
     }

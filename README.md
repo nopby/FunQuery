@@ -172,13 +172,15 @@ Only after that vertical slice is stable will additional functions and external 
 
 ### HTTP host (Milestone 5)
 
-Milestone 5 is in progress. The first stage, M5.1, adds a runnable ASP.NET Core host:
+Milestone 5 is in progress. M5.1–M5.3 add a runnable ASP.NET Core host, the GET endpoint, the error
+contract, and registered sources:
 
 ```bash
 dotnet run --project hosts/FunQuery.Server
 curl "http://localhost:5000/query?q=%24source(%5B1%2C2%2C3%5D).%24count()"
+curl "http://localhost:5000/query?source=orders&q=%24source(%40source).%24filter(id%20gt%201).%24select(id%2C%20customer)"
 ```
 
-Only `GET /query?q=...` is available at this stage. Sources, variables, and POST arrive in M5.3–M5.5.
-See [`docs/Milestone5.md`](docs/Milestone5.md) for the staged plan and
-[`docs/HttpApi.md`](docs/HttpApi.md) for the endpoint and error contract.
+Variables and POST arrive in M5.4–M5.5. See [`docs/Milestone5.md`](docs/Milestone5.md) for the staged
+plan, [`docs/HttpApi.md`](docs/HttpApi.md) for the endpoint and error contract, and
+[`docs/Sources.md`](docs/Sources.md) for source registration and schema.

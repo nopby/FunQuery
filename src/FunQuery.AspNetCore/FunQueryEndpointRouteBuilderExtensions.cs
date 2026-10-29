@@ -1,5 +1,7 @@
 using System.Text;
 using FunQuery.Enums;
+using FunQuery.Execution;
+using FunQuery.SemanticTypes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -11,9 +13,16 @@ namespace FunQuery.AspNetCore;
 public static class FunQueryEndpointRouteBuilderExtensions
 {
     /// <summary>
-    /// Memetakan <c>GET /query?q=...</c>. Query dijalankan lewat <see cref="QueryEngine"/> yang
-    /// didaftarkan <see cref="ServiceCollectionExtensions.AddFunQuery"/>; hasilnya dikirim sebagai
-    /// JSON apa adanya (tidak dibungkus envelope).
+    /// Nama variable yang menerima source terpilih. Query memakainya sebagai
+    /// <c>$source(@source)</c>.
+    /// </summary>
+    private const string SourceVariableName = "source";
+
+    /// <summary>
+    /// Memetakan <c>GET /query?q=...&amp;source=...</c>. Query dijalankan lewat
+    /// <see cref="QueryEngine"/> yang didaftarkan
+    /// <see cref="ServiceCollectionExtensions.AddFunQuery"/>; hasilnya dikirim sebagai JSON apa
+    /// adanya (tidak dibungkus envelope).
     /// </summary>
     public static IEndpointRouteBuilder MapFunQueryEndpoints(this IEndpointRouteBuilder endpoints)
     {
@@ -24,19 +33,21 @@ public static class FunQueryEndpointRouteBuilderExtensions
         endpoints
             .MapGet(
                 options.Route,
-                (HttpContext context, QueryEngine engine) => HandleGet(context, engine, options))
+                (HttpContext context, QueryEngine engine, SourceRegistry sources) =>
+                    HandleGetAsync(context, engine, options, sources))
             .AddEndpointFilter(QueryErrorFilter);
 
         return endpoints;
     }
 
-    private static IResult HandleGet(
+    private static async Task<IResult> HandleGetAsync(
         HttpContext context,
         QueryEngine engine,
-        FunQueryOptions options)
+        FunQueryOptions options,
+        SourceRegistry sources)
     {
-        var values = context.Request.Query[options.QueryParameter];
-        var query = values.Count > 0 ? values[0] : null;
+        var queryValues = context.Request.Query[options.QueryParameter];
+        var query = queryValues.Count > 0 ? queryValues[0] : null;
 
         if (string.IsNullOrWhiteSpace(query))
         {
@@ -45,8 +56,52 @@ public static class FunQueryEndpointRouteBuilderExtensions
                 $"The '{options.QueryParameter}' query parameter is required.");
         }
 
+        var sourceName = context.Request.Query[options.SourceParameter].FirstOrDefault();
+        IQuerySource? source = null;
+        var typeEnvironment = QueryEnvironment.Empty;
+
+        if (!string.IsNullOrEmpty(sourceName))
+        {
+            if (!sources.TryGet(sourceName, out source))
+            {
+                throw new QueryException(
+                    QueryErrorCode.UnknownSource,
+                    $"Unknown source '{sourceName}'.");
+            }
+
+            // Analyzer hanya butuh tipe source, belum datanya.
+            typeEnvironment = QueryEnvironment.From(
+                SourceVariableName,
+                new QueryParameter(new ArrayType(source.Schema), null));
+        }
+
+        // Validasi query terhadap schema sebelum satu baris pun dibaca. Unknown field atau
+        // perbandingan yang salah tipe gagal di sini, bukan setelah source dimuat.
+        var plan = engine.Prepare(query, typeEnvironment);
+
+        var valueEnvironment = typeEnvironment;
+
+        if (source is not null)
+        {
+            var rows = await source.LoadAsync(context.RequestAborted);
+
+            if (rows.Count > options.Limits.MaxSourceItems)
+            {
+                throw new QueryException(
+                    QueryErrorCode.SourceTooLarge,
+                    $"Source '{source.Name}' has more than " +
+                    $"{options.Limits.MaxSourceItems} rows.");
+            }
+
+            var materialized = SourceRows.Materialize(source.Name, source.Schema, rows);
+
+            valueEnvironment = QueryEnvironment.From(
+                SourceVariableName,
+                new QueryParameter(new ArrayType(source.Schema), materialized));
+        }
+
         return Results.Text(
-            engine.Execute(query).ToJson(),
+            engine.ExecutePlan(plan, valueEnvironment).ToJson(),
             "application/json",
             Encoding.UTF8);
     }

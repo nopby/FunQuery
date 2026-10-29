@@ -43,7 +43,7 @@ into `FunQuery.dll`.
 | ----- | -------------------------------------- | ---------- | ---- | ------ |
 | M5.1  | Host skeleton and GET pipeline          | —          | M    | ✅     |
 | M5.2  | Structured errors and status mapping    | M5.1       | S    | ✅     |
-| M5.3  | Typed parameters, source registry, schema | M5.1     | L    | ⏳     |
+| M5.3  | Typed parameters, source registry, schema | M5.1     | L    | ✅     |
 | M5.4  | Query variables (GET)                   | M5.3       | M    | ⏳     |
 | M5.5  | POST endpoint and request contract      | M5.4       | S    | ⏳     |
 | M5.6  | Execution limits and cancellation       | M5.3       | M    | ⏳     |
@@ -151,6 +151,8 @@ This is the largest stage: it adds the only new core API in M5 and the security 
   * seed `SemanticContext` with each parameter's type;
   * pass each parameter's value to `InMemoryCompiler`;
   * keep the existing `Execute(string)` overload as `Execute(query, QueryEnvironment.Empty)`.
+* `QueryEngine.Prepare` / `ExecutePlan`: analysis happens against parameter types before values are
+  needed, so a host can validate the query against a source schema and only then load rows.
 * `InMemoryInterpreter.Execute(...)` accepts the runtime values and forwards them to the compiler.
 * Row materialization helper: build `ObjectValue` rows from an ordered schema, rejecting rows whose
   values do not match the declared types (`TYPE_MISMATCH` with the row/field in the message).
@@ -167,9 +169,10 @@ This is the largest stage: it adds the only new core API in M5 and the security 
   * no enumeration endpoint, so clients cannot discover source names.
 * `GET /query?q=...&source=<name>`:
   * resolve the name; unknown name → `UNKNOWN_SOURCE` (`400`);
+  * analyze the query against the schema with `Prepare` before loading anything;
   * load the rows (eagerly in v1), enforce `MaxSourceItems`;
   * bind the resolved data to the variable `@source` with type `array<schema>`;
-  * execute.
+  * execute the prepared plan.
 * Sample host registers one or two in-memory sources (for example `orders` and `people`).
 
 ### Semantics
@@ -289,14 +292,14 @@ This is the largest stage: it adds the only new core API in M5 and the security 
 * Extend `QueryLimits`:
   * `MaxExecutionTime` (default 2 s);
   * `MaxResultItems` (default 10 000);
-  * `MaxSourceItems` (default 100 000; enforced by the adapter while loading);
+  * `MaxSourceItems` already exists from M5.3 and stays enforced while loading;
   * keep `MaxInputLength`, `MaxTokens`, `MaxDepth`.
 * Thread a per-execution context (deadline + `CancellationToken`) through the interpreter. Check it:
   * at every function step;
   * inside `$filter`, `$map`, `$select`, `$sort`, `$any`, `$first`, `$distinct` loops (every element, or
     every 256 elements if the stopwatch read shows up in profiles).
-* Timeout → `EXECUTION_TIMEOUT`; result over the limit → `RESULT_TOO_LARGE`; source over the limit →
-  `SOURCE_TOO_LARGE`. All three are new stable codes.
+* Timeout → `EXECUTION_TIMEOUT`; result over the limit → `RESULT_TOO_LARGE`. Both are new stable codes;
+  `SOURCE_TOO_LARGE` already exists from M5.3.
 * Client disconnect (`RequestAborted`) stops the query with `OperationCanceledException`; it is not
   reported as a query error.
 * Result limit is an **error**, never silent truncation: a truncated result is a wrong result.

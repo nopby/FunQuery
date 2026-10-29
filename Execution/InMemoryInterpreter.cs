@@ -21,11 +21,14 @@ public sealed class InMemoryInterpreter
     /// <see cref="ObjectValue"/>. Urutan hasil dari sebuah sekuens dijamin sama dengan urutan sumber.
     /// Hasil kosong berupa sekuens kosong, bukan null.
     /// </summary>
-    public object? Execute(BaseExpression analyzed, ReadOnlyMemory<char> source)
+    public object? Execute(
+        BaseExpression analyzed,
+        ReadOnlyMemory<char> source,
+        IReadOnlyDictionary<string, object?>? variables = null)
     {
         ArgumentNullException.ThrowIfNull(analyzed);
 
-        var compiler = new InMemoryCompiler(source, _functions);
+        var compiler = new InMemoryCompiler(source, _functions, variables);
         var program = compiler.Compile(analyzed);
 
         return Materialize(program(null));

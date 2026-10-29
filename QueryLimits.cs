@@ -19,6 +19,7 @@ public sealed class QueryLimits
     private int _maxInputLength = 2048;
     private int _maxTokens = 1024;
     private int _maxDepth = 64;
+    private int _maxSourceItems = 100_000;
 
     /// <summary>Instance bersama dengan semua nilai default.</summary>
     public static QueryLimits Default { get; } = new();
@@ -58,6 +59,16 @@ public sealed class QueryLimits
 
             _maxDepth = value;
         }
+    }
+
+    /// <summary>
+    /// Jumlah baris maksimum yang boleh dimuat dari satu source terdaftar. Default 100.000.
+    /// Melebihi batas ini adalah <c>SOURCE_TOO_LARGE</c>, bukan pemotongan diam-diam.
+    /// </summary>
+    public int MaxSourceItems
+    {
+        get => _maxSourceItems;
+        init => _maxSourceItems = AtLeastOne(value, nameof(MaxSourceItems));
     }
 
     private static int AtLeastOne(int value, string name)
