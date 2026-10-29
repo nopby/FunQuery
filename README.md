@@ -103,10 +103,11 @@ The roadmap is divided into vertical milestones. Each milestone has a concrete d
 | 4         | Function set v1          | ✅     |
 | 5         | ASP.NET Core integration | ✅     |
 | 6         | Providers (PostgreSQL)   | ✅     |
-| 7         | Developer experience     | ⏳     |
+| 7         | Developer experience     | ✅     |
 
-See [`docs/Milestones.md`](docs/Milestones.md) for the detailed roadmap. Milestone 7 is planned; see
-[`docs/Milestone7.md`](docs/Milestone7.md).
+See [`docs/Milestones.md`](docs/Milestones.md) for the detailed roadmap. Milestone 7 is complete; see
+[`docs/Milestone7.md`](docs/Milestone7.md) for the work log and
+[`docs/OpenApi.md`](docs/OpenApi.md) for the OpenAPI document and docs UI.
 
 ## Language Direction
 
@@ -245,5 +246,6 @@ limitations matrix.
 
 See [`docs/Milestone6.md`](docs/Milestone6.md) for the staged plan,
 [`docs/HttpApi.md`](docs/HttpApi.md) for the GET/POST endpoints, variables, limits, security, and error
-contract, [`docs/Development.md`](docs/Development.md) for local PostgreSQL setup, and
+contract, [`docs/OpenApi.md`](docs/OpenApi.md) for the OpenAPI document and docs UI,
+[`docs/Development.md`](docs/Development.md) for local PostgreSQL setup, and
 [`docs/Sources.md`](docs/Sources.md) for source registration and schema.

@@ -23,7 +23,7 @@ semantics.
 | M7.2  | Interactive API docs UI                    | M7.1       | S    | ✅     |
 | M7.3  | Playground polish and integration          | M7.1       | S    | ✅     |
 | M7.4  | Local development environment              | M6         | M    | ✅     |
-| M7.5  | Documentation and close-out                | M7.1–M7.4  | S    | ⏳     |
+| M7.5  | Documentation and close-out                | M7.1–M7.4  | S    | ✅     |
 
 ---
 
@@ -222,6 +222,19 @@ semantics.
 * The OpenAPI document and docs UI match the implementation.
 * The local development guide is tested on a fresh environment.
 * The security checklist from M5 still holds.
+
+### Result
+
+* [`OpenApi.md`](OpenApi.md) documents the endpoints, URLs, options, examples, AOT strategy, security
+  headers, and the supported/unsupported docs features.
+* README, `Milestones.md`, and this plan now mark Milestone 7 complete; the local guide remains in
+  [`Development.md`](Development.md).
+* Final verification: `dotnet test` passed **1161 tests** against PostgreSQL 18.3; both Native AOT
+  hosts were published. The in-memory host served the document, UI, playground, and a query; the
+  PostgreSQL host served the document, UI, and provider/in-memory queries.
+* The M5 security posture still holds: developer tools are opt-in, the document contains no secrets, the
+  UI uses a nonce CSP and local assets, source names remain gated by `ExposeSourceNames`, and the
+  playground/docs return `404` when disabled.
 
 ---
 

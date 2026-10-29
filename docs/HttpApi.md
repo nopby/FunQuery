@@ -252,6 +252,9 @@ The sample hosts apply `UseFunQueryApiDocsSecurityHeaders`:
 The UI is opt-in and intended for development. Disable `ApiDocs:Enabled` (and `OpenApi:Enabled` if the
 document is not needed) in production.
 
+See [`OpenApi.md`](OpenApi.md) for the full option table, examples, AOT notes, and supported/unsupported
+features.
+
 ```json
 {
   "OpenApi": {

@@ -570,13 +570,16 @@ Provider-specific limitations must be explicit through the capability model.
 
 ---
 
-# Milestone 7 — Developer Experience
+# Milestone 7 - Developer Experience
+
+**Status:** ✅ Complete.
 
 **Goal:** make FunQuery easy to discover, try, and integrate without changing the language or the HTTP
 contract.
 
 The staged work plan for this milestone is in [`Milestone7.md`](Milestone7.md). The local PostgreSQL
-setup and seed guide is in [`Development.md`](Development.md).
+setup and seed guide is in [`Development.md`](Development.md); the OpenAPI/docs UI guide is in
+[`OpenApi.md`](OpenApi.md).
 
 ## Scope
 
