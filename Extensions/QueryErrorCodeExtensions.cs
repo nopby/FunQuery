@@ -43,6 +43,7 @@ public static class QueryErrorCodeExtensions
         QueryErrorCode.TooManyTokens => "TOO_MANY_TOKENS",
 
         QueryErrorCode.InvalidRequest => "INVALID_REQUEST",
+        QueryErrorCode.UnsupportedMediaType => "UNSUPPORTED_MEDIA_TYPE",
         QueryErrorCode.UnknownSource => "UNKNOWN_SOURCE",
         QueryErrorCode.InvalidParameter => "INVALID_PARAMETER",
         QueryErrorCode.RequestBodyTooLarge => "REQUEST_TOO_LARGE",

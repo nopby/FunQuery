@@ -187,6 +187,14 @@ Query variables are supplied as `v.<name>`:
 curl "http://localhost:5000/query?v.min=1&q=%24source(%5B%7Bid%3A1%7D%2C%7Bid%3A2%7D%5D).%24filter(id%20gt%20%40min).%24count()"
 ```
 
-POST arrives in M5.5. See [`docs/Milestone5.md`](docs/Milestone5.md) for the staged plan,
-[`docs/HttpApi.md`](docs/HttpApi.md) for the endpoint, variables, and error contract, and
+POST accepts the same query in a JSON body:
+
+```bash
+curl -X POST http://localhost:5000/query \
+  -H "Content-Type: application/json" \
+  -d '{"query":"$source(@source).$filter(id gt @min).$count()","source":"orders","variables":{"min":1}}'
+```
+
+Execution limits arrive in M5.6. See [`docs/Milestone5.md`](docs/Milestone5.md) for the staged plan,
+[`docs/HttpApi.md`](docs/HttpApi.md) for the GET/POST, variables, and error contract, and
 [`docs/Sources.md`](docs/Sources.md) for source registration and schema.

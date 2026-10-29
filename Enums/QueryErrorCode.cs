@@ -50,6 +50,7 @@ public enum QueryErrorCode
 
     // Integrasi HTTP dan batas eksekusi
     InvalidRequest,
+    UnsupportedMediaType,
     UnknownSource,
     InvalidParameter,
     RequestBodyTooLarge,

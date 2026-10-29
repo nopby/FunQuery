@@ -45,7 +45,7 @@ into `FunQuery.dll`.
 | M5.2  | Structured errors and status mapping    | M5.1       | S    | ✅     |
 | M5.3  | Typed parameters, source registry, schema | M5.1     | L    | ✅     |
 | M5.4  | Query variables (GET)                   | M5.3       | M    | ✅     |
-| M5.5  | POST endpoint and request contract      | M5.4       | S    | ⏳     |
+| M5.5  | POST endpoint and request contract      | M5.4       | S    | ✅     |
 | M5.6  | Execution limits and cancellation       | M5.3       | M    | ⏳     |
 | M5.7  | Hardening, docs, and milestone close-out | M5.1–M5.6 | M    | ⏳     |
 
@@ -260,24 +260,25 @@ This is the largest stage: it adds the only new core API in M5 and the security 
     "variables": { "min": 100, "region": "EU", "since": "2024-01-01" }
   }
   ```
-* Same pipeline and response shape as GET; only the binding source differs.
+* Same pipeline and response shape as GET; only how the query, source, and variables are read differs.
 * JSON types map to language types: `true`/`false` → `bool`, number → `int`/`long`/`decimal`
   (same inference rules as literals), string → `string`, `null` → `null`. Arrays and objects in
   `variables` are rejected in v1 (`INVALID_PARAMETER`), because the language has no parameter syntax for
   them yet.
 * Request body limit (default 64 KB, configurable), `Content-Type` validation (`415` for a non-JSON body),
   and malformed JSON → `400 INVALID_REQUEST`.
-* Reject unknown top-level properties? Decision: ignore them for forward compatibility, but document it.
-* Map body-level errors to the M5.2 envelope with `position` omitted.
+* Unknown top-level properties are ignored for forward compatibility, and documented as such.
+* Body-level errors use the M5.2 envelope with `position` omitted.
 
 ### Tests
 
 * POST parity with GET for the same query and variables.
-* A query longer than the GET limit but under the POST limit succeeds.
+* A long query (still under `MaxInputLength`) succeeds through POST.
 * Malformed JSON → `400 INVALID_REQUEST`; wrong content type → `415`.
 * Body over the limit → `413`.
 * JSON number inference: `1` is `int`, `2147483648` is `long`, `1.5` is `decimal`.
-* Array/object variable → `400 INVALID_PARAMETER`.
+* Array/object variable → `400 INVALID_PARAMETER`; duplicate/invalid/too many variables are rejected.
+* Unknown top-level properties are ignored; a non-string `query` is `INVALID_REQUEST`.
 
 ### Definition of Done
 

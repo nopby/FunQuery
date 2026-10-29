@@ -1,10 +1,10 @@
 # FunQuery HTTP API
 
 This document specifies the HTTP surface of the ASP.NET Core adapter. It currently covers Milestone
-5.1–5.4 (GET, the error contract, registered sources, and query variables); POST and execution limits
-are added in later stages of [`Milestone5.md`](Milestone5.md).
+5.1–5.5 (GET, POST, the error contract, registered sources, and query variables); execution limits are
+added in the last stage of [`Milestone5.md`](Milestone5.md).
 
-## Endpoint
+## GET /query
 
 ```http
 GET /query?q=<url-encoded query>&source=<registered source>
@@ -26,6 +26,39 @@ curl "http://localhost:5000/query?q=%24source(%5B1%2C2%2C3%5D).%24count()"
 The result keeps the language's own JSON encoding: objects are written in field order, arrays in element
 order, dates as `"yyyy-MM-dd"`, and `null` as `null`.
 
+## POST /query
+
+```http
+POST /query
+Content-Type: application/json
+
+{
+  "query": "$source(@source).$filter(id gt @min).$take(10)",
+  "source": "orders",
+  "variables": { "min": 100, "region": "EU" }
+}
+```
+
+| Field | Rule |
+| ----- | ---- |
+| `query` | Required string. Same language and same `QueryLimits.MaxInputLength` as GET |
+| `source` | Optional string; same registry and `@source` binding as GET |
+| `variables` | Optional object of JSON scalars; `null` means no variables. Arrays and objects are rejected (`INVALID_PARAMETER`) |
+| Unknown properties | Ignored, so adding a field later does not break older clients |
+| Content type | Must be JSON (`application/json` or a `+json` type). Anything else is `UNSUPPORTED_MEDIA_TYPE` (`415`) |
+| Body size | At most `FunQueryOptions.MaxRequestBodyBytes` (default 64 KB), otherwise `REQUEST_TOO_LARGE` (`413`) |
+| Malformed JSON | `INVALID_REQUEST` (`400`). The body and parser details are never echoed back |
+
+GET and POST share one pipeline, so the same query, source, and variables produce the same result JSON
+and the same error envelope. POST exists for payloads that are awkward or too long for a URL.
+
+```bash
+curl -X POST http://localhost:5000/query \
+  -H "Content-Type: application/json" \
+  -d '{"query":"$source(@source).$filter(id gt @min).$count()","source":"orders","variables":{"min":1}}'
+# 4
+```
+
 ## Sources
 
 `source` selects one source registered at startup and binds it to the variable `@source`:
@@ -41,7 +74,8 @@ See [`Sources.md`](Sources.md) for registration, the row contract, capabilities,
 
 ## Variables
 
-Every query parameter named `v.<name>` becomes the variable `@name`:
+On GET, every query parameter named `v.<name>` becomes the variable `@name`. On POST, the same names
+come from the `variables` object:
 
 ```bash
 curl "http://localhost:5000/query?source=orders&v.min=100&q=%24source(%40source).%24filter(total%20gt%20%40min)"
@@ -120,6 +154,7 @@ unhandled error can never leak an exception type or a stack trace.
 | `400` | `MAX_DEPTH_EXCEEDED`, `TOO_MANY_TOKENS` | The query is too complex |
 | `400` | `INVALID_REQUEST`, `UNKNOWN_SOURCE`, `INVALID_PARAMETER` | The request is malformed |
 | `413` | `INPUT_TOO_LONG`, `REQUEST_TOO_LARGE` | The query string or request body is too large |
+| `415` | `UNSUPPORTED_MEDIA_TYPE` | A POST body was sent with a non-JSON content type |
 | `408` | `EXECUTION_TIMEOUT` | The query exceeded its time budget (M5.6) |
 | `422` | `RESULT_TOO_LARGE`, `SOURCE_TOO_LARGE` | The query is valid but its result or source is too large (source limit in M5.3, result limit in M5.6) |
 | `500` | `INTERNAL_ERROR` | A bug in the server, not in the request |
@@ -140,6 +175,7 @@ policy can replace the endpoint filter, but the default is part of the API contr
 | `MaxSourceItems` | 100 000 rows | `SOURCE_TOO_LARGE` (`422`) |
 | `MaxParameters` | 32 | `INVALID_PARAMETER` (`400`) |
 | `MaxParameterValueLength` | 1024 characters | `INVALID_PARAMETER` (`400`) |
+| `MaxRequestBodyBytes` | 64 KB (option, not a query limit) | `REQUEST_TOO_LARGE` (`413`) |
 
 Set them at startup:
 
@@ -161,7 +197,6 @@ Time and result-size limits arrive in M5.6.
 
 ## Not yet available
 
-* `POST /query` — M5.5.
 * Execution timeout and result-size limits — M5.6.
 * OpenAPI document — M5.7, optional.
 

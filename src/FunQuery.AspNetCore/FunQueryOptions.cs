@@ -19,6 +19,12 @@ public sealed class FunQueryOptions
     public string SourceParameter { get; set; } = "source";
 
     /// <summary>
+    /// Ukuran maksimum body <c>POST /query</c> dalam byte. Default 64 KB. Body yang lebih besar
+    /// ditolak sebagai <c>REQUEST_TOO_LARGE</c> (413) tanpa membaca seluruhnya.
+    /// </summary>
+    public int MaxRequestBodyBytes { get; set; } = 64 * 1024;
+
+    /// <summary>
     /// Batas yang dipakai <see cref="QueryEngine"/> untuk setiap request. Default
     /// <see cref="QueryLimits.Default"/> (input 2048 karakter, 1024 token, kedalaman 64).
     /// </summary>
@@ -40,6 +46,12 @@ public sealed class FunQueryOptions
             throw new ArgumentException(
                 $"{nameof(SourceParameter)} must not be empty.",
                 nameof(SourceParameter));
+
+        if (MaxRequestBodyBytes < 1)
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxRequestBodyBytes),
+                MaxRequestBodyBytes,
+                $"{nameof(MaxRequestBodyBytes)} must be at least 1.");
 
         ArgumentNullException.ThrowIfNull(Limits, nameof(Limits));
     }

@@ -10,6 +10,7 @@ public class QueryErrorStatusTests
     [Theory]
     [InlineData(QueryErrorCode.InputTooLong, 413)]
     [InlineData(QueryErrorCode.RequestBodyTooLarge, 413)]
+    [InlineData(QueryErrorCode.UnsupportedMediaType, 415)]
     [InlineData(QueryErrorCode.ExecutionTimeout, 408)]
     [InlineData(QueryErrorCode.ResultTooLarge, 422)]
     [InlineData(QueryErrorCode.SourceTooLarge, 422)]

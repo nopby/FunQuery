@@ -8,8 +8,11 @@ namespace FunQuery.AspNetCore;
 /// Konteks serialisasi sumber-generated untuk DTO adapter. Tidak ada serializer berbasis
 /// reflection, sehingga jalur ini tetap aman bila host di-publish dengan Native AOT.
 /// </summary>
-[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(QueryErrorResponse))]
+[JsonSerializable(typeof(QueryRequest))]
 internal sealed partial class FunQueryJsonContext : JsonSerializerContext
 {
     /// <summary>

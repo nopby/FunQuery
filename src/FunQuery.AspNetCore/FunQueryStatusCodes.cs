@@ -23,6 +23,9 @@ public static class FunQueryStatusCodes
             QueryErrorCode.ResultTooLarge or
             QueryErrorCode.SourceTooLarge => StatusCodes.Status422UnprocessableEntity,
 
+            // Content-Type yang tidak didukung.
+            QueryErrorCode.UnsupportedMediaType => StatusCodes.Status415UnsupportedMediaType,
+
             // Bug di server, bukan kesalahan pemanggil.
             QueryErrorCode.InternalError => StatusCodes.Status500InternalServerError,
 

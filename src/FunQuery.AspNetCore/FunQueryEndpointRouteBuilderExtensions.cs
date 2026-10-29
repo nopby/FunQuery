@@ -13,10 +13,9 @@ namespace FunQuery.AspNetCore;
 public static class FunQueryEndpointRouteBuilderExtensions
 {
     /// <summary>
-    /// Memetakan <c>GET /query?q=...&amp;source=...</c>. Query dijalankan lewat
-    /// <see cref="QueryEngine"/> yang didaftarkan
-    /// <see cref="ServiceCollectionExtensions.AddFunQuery"/>; hasilnya dikirim sebagai JSON apa
-    /// adanya (tidak dibungkus envelope).
+    /// Memetakan <c>GET /query</c> dan <c>POST /query</c>. Keduanya memakai pipeline yang sama
+    /// (analisis, source, eksekusi) dan envelope error yang sama; hanya cara membaca query,
+    /// source, dan variabel yang berbeda.
     /// </summary>
     public static IEndpointRouteBuilder MapFunQueryEndpoints(this IEndpointRouteBuilder endpoints)
     {
@@ -29,6 +28,13 @@ public static class FunQueryEndpointRouteBuilderExtensions
                 options.Route,
                 (HttpContext context, QueryEngine engine, SourceRegistry sources) =>
                     HandleGetAsync(context, engine, options, sources))
+            .AddEndpointFilter(QueryErrorFilter);
+
+        endpoints
+            .MapPost(
+                options.Route,
+                (HttpContext context, QueryEngine engine, SourceRegistry sources) =>
+                    HandlePostAsync(context, engine, options, sources))
             .AddEndpointFilter(QueryErrorFilter);
 
         return endpoints;
@@ -45,13 +51,56 @@ public static class FunQueryEndpointRouteBuilderExtensions
 
         if (string.IsNullOrWhiteSpace(query))
         {
-            throw new QueryException(
-                QueryErrorCode.InvalidRequest,
+            throw InvalidRequest(
                 $"The '{options.QueryParameter}' query parameter is required.");
         }
 
         var sourceName = context.Request.Query[options.SourceParameter].FirstOrDefault();
         var variables = QueryStringVariables.Read(context.Request.Query, options.Limits);
+
+        return await ExecuteAsync(
+            context,
+            engine,
+            options,
+            sources,
+            query,
+            sourceName,
+            variables);
+    }
+
+    private static async Task<IResult> HandlePostAsync(
+        HttpContext context,
+        QueryEngine engine,
+        FunQueryOptions options,
+        SourceRegistry sources)
+    {
+        var request = await QueryRequestReader.ReadAsync(context, options);
+        var query = request.Query;
+
+        if (string.IsNullOrWhiteSpace(query))
+            throw InvalidRequest("The 'query' field is required.");
+
+        var variables = QueryRequestReader.ReadVariables(request, options.Limits);
+
+        return await ExecuteAsync(
+            context,
+            engine,
+            options,
+            sources,
+            query,
+            request.Source,
+            variables);
+    }
+
+    private static async Task<IResult> ExecuteAsync(
+        HttpContext context,
+        QueryEngine engine,
+        FunQueryOptions options,
+        SourceRegistry sources,
+        string query,
+        string? sourceName,
+        QueryEnvironment variables)
+    {
         IQuerySource? source = null;
         var typeEnvironment = variables;
 
@@ -66,7 +115,7 @@ public static class FunQueryEndpointRouteBuilderExtensions
 
             // Analyzer hanya butuh tipe source, belum datanya.
             typeEnvironment = typeEnvironment.With(
-                QueryStringVariables.SourceVariableName,
+                QueryVariableValues.SourceVariableName,
                 new QueryParameter(new ArrayType(source.Schema), null));
         }
 
@@ -91,7 +140,7 @@ public static class FunQueryEndpointRouteBuilderExtensions
             var materialized = SourceRows.Materialize(source.Name, source.Schema, rows);
 
             valueEnvironment = valueEnvironment.With(
-                QueryStringVariables.SourceVariableName,
+                QueryVariableValues.SourceVariableName,
                 new QueryParameter(new ArrayType(source.Schema), materialized));
         }
 
@@ -100,6 +149,9 @@ public static class FunQueryEndpointRouteBuilderExtensions
             "application/json",
             Encoding.UTF8);
     }
+
+    private static QueryException InvalidRequest(string message) =>
+        new(QueryErrorCode.InvalidRequest, message);
 
     /// <summary>
     /// Satu pintu untuk semua kegagalan endpoint: input error memakai kode dan posisinya,
