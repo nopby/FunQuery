@@ -43,6 +43,12 @@ public static class QueryErrorCodeExtensions
         QueryErrorCode.TooManyTokens => "TOO_MANY_TOKENS",
 
         QueryErrorCode.InvalidRequest => "INVALID_REQUEST",
+        QueryErrorCode.UnknownSource => "UNKNOWN_SOURCE",
+        QueryErrorCode.InvalidParameter => "INVALID_PARAMETER",
+        QueryErrorCode.RequestBodyTooLarge => "REQUEST_TOO_LARGE",
+        QueryErrorCode.ExecutionTimeout => "EXECUTION_TIMEOUT",
+        QueryErrorCode.ResultTooLarge => "RESULT_TOO_LARGE",
+        QueryErrorCode.SourceTooLarge => "SOURCE_TOO_LARGE",
 
         _ => "INTERNAL_ERROR",
     };

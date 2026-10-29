@@ -1,7 +1,5 @@
 using System.Text;
-using System.Text.Json;
 using FunQuery.Enums;
-using FunQuery.Extensions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -23,9 +21,11 @@ public static class FunQueryEndpointRouteBuilderExtensions
 
         var options = endpoints.ServiceProvider.GetRequiredService<FunQueryOptions>();
 
-        endpoints.MapGet(
-            options.Route,
-            (HttpContext context, QueryEngine engine) => HandleGet(context, engine, options));
+        endpoints
+            .MapGet(
+                options.Route,
+                (HttpContext context, QueryEngine engine) => HandleGet(context, engine, options))
+            .AddEndpointFilter(QueryErrorFilter);
 
         return endpoints;
     }
@@ -40,66 +40,46 @@ public static class FunQueryEndpointRouteBuilderExtensions
 
         if (string.IsNullOrWhiteSpace(query))
         {
-            return Error(
+            throw new QueryException(
                 QueryErrorCode.InvalidRequest,
-                $"The '{options.QueryParameter}' query parameter is required.",
-                StatusCodes.Status400BadRequest);
+                $"The '{options.QueryParameter}' query parameter is required.");
         }
 
+        return Results.Text(
+            engine.Execute(query).ToJson(),
+            "application/json",
+            Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Satu pintu untuk semua kegagalan endpoint: input error memakai kode dan posisinya,
+    /// exception tak terduga menjadi 500 generik tanpa membocorkan detail.
+    /// </summary>
+    private static async ValueTask<object?> QueryErrorFilter(
+        EndpointFilterInvocationContext context,
+        EndpointFilterDelegate next)
+    {
         try
         {
-            var result = engine.Execute(query);
-
-            return Results.Text(
-                result.ToJson(),
-                "application/json",
-                Encoding.UTF8);
+            return await next(context);
         }
-        catch (QueryException error) when (!error.IsInternal)
+        catch (OperationCanceledException) when (context.HttpContext.RequestAborted.IsCancellationRequested)
         {
-            return Error(error, StatusCodes.Status400BadRequest);
+            // Klien sudah pergi; tidak ada respons yang perlu ditulis.
+            throw;
         }
         catch (QueryException error)
         {
-            context.RequestServices
+            return QueryErrorResults.ToResult(QueryErrorResults.From(error));
+        }
+        catch (Exception error)
+        {
+            context.HttpContext.RequestServices
                 .GetRequiredService<ILoggerFactory>()
                 .CreateLogger("FunQuery.AspNetCore")
-                .LogError(error, "The query failed with an internal error.");
+                .LogError(error, "The query failed with an unexpected error.");
 
-            return Error(
-                QueryErrorCode.InternalError,
-                "The query could not be executed.",
-                StatusCodes.Status500InternalServerError);
+            return QueryErrorResults.ToResult(QueryErrorResults.Unexpected());
         }
-    }
-
-    private static IResult Error(QueryException error, int statusCode) =>
-        Error(
-            error.Code,
-            error.Message,
-            statusCode,
-            error.HasPosition ? error.Position : null,
-            error.HasPosition ? error.Length : null);
-
-    private static IResult Error(
-        QueryErrorCode code,
-        string message,
-        int statusCode,
-        int? position = null,
-        int? length = null)
-    {
-        var response = new QueryErrorResponse
-        {
-            Code = code.ToCode(),
-            Message = message,
-            Position = position,
-            Length = length,
-        };
-
-        return Results.Text(
-            JsonSerializer.Serialize(response, FunQueryJsonContext.Default.QueryErrorResponse),
-            "application/json",
-            Encoding.UTF8,
-            statusCode);
     }
 }

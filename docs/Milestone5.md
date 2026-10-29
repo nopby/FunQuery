@@ -42,7 +42,7 @@ into `FunQuery.dll`.
 | Stage | Name                                   | Depends on | Size | Status |
 | ----- | -------------------------------------- | ---------- | ---- | ------ |
 | M5.1  | Host skeleton and GET pipeline          | —          | M    | ✅     |
-| M5.2  | Structured errors and status mapping    | M5.1       | S    | ⏳     |
+| M5.2  | Structured errors and status mapping    | M5.1       | S    | ✅     |
 | M5.3  | Typed parameters, source registry, schema | M5.1     | L    | ⏳     |
 | M5.4  | Query variables (GET)                   | M5.3       | M    | ⏳     |
 | M5.5  | POST endpoint and request contract      | M5.4       | S    | ⏳     |
@@ -117,7 +117,10 @@ its JSON result.
   | Internal error (`IsInternal`)                          | `500`  |
 
 * Internal errors return a generic message; the real message and stack go to the server log only.
-* Catch-all middleware: an unexpected exception becomes `500` with `INTERNAL_ERROR`, never a stack trace.
+* Catch-all error path: the endpoint filter catches anything the handler throws. An unexpected exception
+  becomes `500` with `INTERNAL_ERROR`, never a stack trace.
+* One status mapping, `FunQueryStatusCodes.For(QueryErrorCode)`, so the table and the implementation cannot
+  drift.
 
 ### Tests
 

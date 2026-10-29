@@ -20,4 +20,9 @@
     <InternalsVisibleTo Include="FunQuery.Tests" />
   </ItemGroup>
 
+  <!-- The HTTP adapter's error helpers are internal; its test project verifies them directly. -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'FunQuery.AspNetCore'">
+    <InternalsVisibleTo Include="FunQuery.AspNetCore.Tests" />
+  </ItemGroup>
+
 </Project>

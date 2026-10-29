@@ -179,5 +179,6 @@ dotnet run --project hosts/FunQuery.Server
 curl "http://localhost:5000/query?q=%24source(%5B1%2C2%2C3%5D).%24count()"
 ```
 
-Only `GET /query?q=...` is available at this stage. Sources, variables, POST, and the final error
-contract arrive in M5.2–M5.5. See [`docs/Milestone5.md`](docs/Milestone5.md).
+Only `GET /query?q=...` is available at this stage. Sources, variables, and POST arrive in M5.3–M5.5.
+See [`docs/Milestone5.md`](docs/Milestone5.md) for the staged plan and
+[`docs/HttpApi.md`](docs/HttpApi.md) for the endpoint and error contract.

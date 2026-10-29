@@ -1,3 +1,5 @@
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace FunQuery.AspNetCore;
@@ -10,4 +12,14 @@ namespace FunQuery.AspNetCore;
 [JsonSerializable(typeof(QueryErrorResponse))]
 internal sealed partial class FunQueryJsonContext : JsonSerializerContext
 {
+    /// <summary>
+    /// Sama dengan konteks default, tetapi tidak meng-escape karakter seperti tanda kutip
+    /// tunggal. Encoding ini tetap JSON yang valid; hasilnya konsisten dengan ValueJson.
+    /// </summary>
+    internal static readonly FunQueryJsonContext Relaxed = new(
+        new JsonSerializerOptions
+        {
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        });
 }

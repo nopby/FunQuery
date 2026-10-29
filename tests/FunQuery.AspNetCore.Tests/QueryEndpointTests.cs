@@ -84,6 +84,7 @@ public class QueryEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         var response = await _client.GetAsync(Url("$unknown()"));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
 
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("\"code\":\"UNKNOWN_FUNCTION\"", body);
@@ -97,10 +98,58 @@ public class QueryEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         var response = await _client.GetAsync(Url("$source([1, 2,])"));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
 
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("\"code\":\"UNEXPECTED_TOKEN\"", body);
         Assert.Contains("\"position\":", body);
+    }
+
+    [Fact]
+    public async Task Get_QueryTooLong_Returns413()
+    {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+                builder.ConfigureServices(services =>
+                    services.AddFunQuery(options =>
+                        options.Limits = new QueryLimits { MaxInputLength = 10 })));
+
+        var response = await factory.CreateClient()
+            .GetAsync(Url("$source([1, 2, 3]).$count()"));
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("INPUT_TOO_LONG", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Get_TooManyTokens_Returns400()
+    {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+                builder.ConfigureServices(services =>
+                    services.AddFunQuery(options =>
+                        options.Limits = new QueryLimits { MaxTokens = 2 })));
+
+        var response = await factory.CreateClient().GetAsync(Url("$source([1])"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("TOO_MANY_TOKENS", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Get_TooDeep_Returns400()
+    {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+                builder.ConfigureServices(services =>
+                    services.AddFunQuery(options =>
+                        options.Limits = new QueryLimits { MaxDepth = 2 })));
+
+        var response = await factory.CreateClient().GetAsync(Url("$source([[1]])"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("MAX_DEPTH_EXCEEDED", await response.Content.ReadAsStringAsync());
     }
 
     [Fact]

@@ -48,8 +48,14 @@ public enum QueryErrorCode
     MaxDepthExceeded,
     TooManyTokens,
 
-    // Integrasi HTTP
+    // Integrasi HTTP dan batas eksekusi
     InvalidRequest,
+    UnknownSource,
+    InvalidParameter,
+    RequestBodyTooLarge,
+    ExecutionTimeout,
+    ResultTooLarge,
+    SourceTooLarge,
 
     // Bug di FunQuery sendiri, bukan kesalahan input pengguna
     InternalError,
