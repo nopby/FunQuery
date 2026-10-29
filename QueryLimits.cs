@@ -20,6 +20,8 @@ public sealed class QueryLimits
     private int _maxTokens = 1024;
     private int _maxDepth = 64;
     private int _maxSourceItems = 100_000;
+    private int _maxParameters = 32;
+    private int _maxParameterValueLength = 1024;
 
     /// <summary>Instance bersama dengan semua nilai default.</summary>
     public static QueryLimits Default { get; } = new();
@@ -69,6 +71,34 @@ public sealed class QueryLimits
     {
         get => _maxSourceItems;
         init => _maxSourceItems = AtLeastOne(value, nameof(MaxSourceItems));
+    }
+
+    /// <summary>
+    /// Jumlah maksimum parameter <c>v.</c> pada satu request. Default 32; 0 menonaktifkan
+    /// variabel dari query string. Melebihi batas ini adalah <c>INVALID_PARAMETER</c>.
+    /// </summary>
+    public int MaxParameters
+    {
+        get => _maxParameters;
+        init
+        {
+            if (value < 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(MaxParameters),
+                    value,
+                    $"{nameof(MaxParameters)} must not be negative.");
+
+            _maxParameters = value;
+        }
+    }
+
+    /// <summary>
+    /// Panjang maksimum satu nilai parameter (karakter, setelah URL didecode). Default 1024.
+    /// </summary>
+    public int MaxParameterValueLength
+    {
+        get => _maxParameterValueLength;
+        init => _maxParameterValueLength = AtLeastOne(value, nameof(MaxParameterValueLength));
     }
 
     private static int AtLeastOne(int value, string name)

@@ -13,12 +13,6 @@ namespace FunQuery.AspNetCore;
 public static class FunQueryEndpointRouteBuilderExtensions
 {
     /// <summary>
-    /// Nama variable yang menerima source terpilih. Query memakainya sebagai
-    /// <c>$source(@source)</c>.
-    /// </summary>
-    private const string SourceVariableName = "source";
-
-    /// <summary>
     /// Memetakan <c>GET /query?q=...&amp;source=...</c>. Query dijalankan lewat
     /// <see cref="QueryEngine"/> yang didaftarkan
     /// <see cref="ServiceCollectionExtensions.AddFunQuery"/>; hasilnya dikirim sebagai JSON apa
@@ -57,8 +51,9 @@ public static class FunQueryEndpointRouteBuilderExtensions
         }
 
         var sourceName = context.Request.Query[options.SourceParameter].FirstOrDefault();
+        var variables = QueryStringVariables.Read(context.Request.Query, options.Limits);
         IQuerySource? source = null;
-        var typeEnvironment = QueryEnvironment.Empty;
+        var typeEnvironment = variables;
 
         if (!string.IsNullOrEmpty(sourceName))
         {
@@ -70,8 +65,8 @@ public static class FunQueryEndpointRouteBuilderExtensions
             }
 
             // Analyzer hanya butuh tipe source, belum datanya.
-            typeEnvironment = QueryEnvironment.From(
-                SourceVariableName,
+            typeEnvironment = typeEnvironment.With(
+                QueryStringVariables.SourceVariableName,
                 new QueryParameter(new ArrayType(source.Schema), null));
         }
 
@@ -79,7 +74,7 @@ public static class FunQueryEndpointRouteBuilderExtensions
         // perbandingan yang salah tipe gagal di sini, bukan setelah source dimuat.
         var plan = engine.Prepare(query, typeEnvironment);
 
-        var valueEnvironment = typeEnvironment;
+        var valueEnvironment = variables;
 
         if (source is not null)
         {
@@ -95,8 +90,8 @@ public static class FunQueryEndpointRouteBuilderExtensions
 
             var materialized = SourceRows.Materialize(source.Name, source.Schema, rows);
 
-            valueEnvironment = QueryEnvironment.From(
-                SourceVariableName,
+            valueEnvironment = valueEnvironment.With(
+                QueryStringVariables.SourceVariableName,
                 new QueryParameter(new ArrayType(source.Schema), materialized));
         }
 

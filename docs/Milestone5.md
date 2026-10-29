@@ -44,7 +44,7 @@ into `FunQuery.dll`.
 | M5.1  | Host skeleton and GET pipeline          | —          | M    | ✅     |
 | M5.2  | Structured errors and status mapping    | M5.1       | S    | ✅     |
 | M5.3  | Typed parameters, source registry, schema | M5.1     | L    | ✅     |
-| M5.4  | Query variables (GET)                   | M5.3       | M    | ⏳     |
+| M5.4  | Query variables (GET)                   | M5.3       | M    | ✅     |
 | M5.5  | POST endpoint and request contract      | M5.4       | S    | ⏳     |
 | M5.6  | Execution limits and cancellation       | M5.3       | M    | ⏳     |
 | M5.7  | Hardening, docs, and milestone close-out | M5.1–M5.6 | M    | ⏳     |
@@ -210,17 +210,18 @@ This is the largest stage: it adds the only new core API in M5 and the security 
 
 ### Work
 
-* GET syntax (proposed): every parameter named `v.<name>` becomes `@name`:
+* GET syntax: every parameter named `v.<name>` becomes `@name`:
   ```http
   GET /query?q=$source(@source).$filter(id gt @min)&source=orders&v.min=100
   ```
-  * reserved names: `q`, `source`, and the `v.` prefix;
+  * reserved query parameters: `q` and `source`; the `v.` prefix is reserved for variables;
+  * the variable name `source` is reserved for the selected source;
   * value parsing: try a JSON scalar (`true`, `false`, `null`, number, quoted string); otherwise treat
     the raw text as a string;
   * dates are not a JSON scalar type, so use `$date(@raw)` in the query or POST in M5.5.
 * Validate parameter names against the identifier rules; reject duplicates, `v.` with an empty name, and
-  reserved names (`INVALID_PARAMETER`).
-* Enforce `MaxParameters` (default 32) and a per-value length limit.
+  the reserved `source` name (`INVALID_PARAMETER`).
+* Enforce `MaxParameters` (default 32) and `MaxParameterValueLength` (default 1024).
 * Seed the analyzer and the compiler through `QueryEnvironment` (M5.3). No second binding mechanism.
 * `$let` may not redefine an externally supplied parameter (`VARIABLE_REDEFINED`), matching the current
   variable rule.
@@ -233,6 +234,8 @@ This is the largest stage: it adds the only new core API in M5 and the security 
 * Quoted JSON `v.name="Ana"` and bare `v.name=Ana` both bind `Ana`.
 * Undefined `@x` → `400 UNDEFINED_VARIABLE`.
 * Invalid name, duplicate name, too many parameters → `400 INVALID_PARAMETER`.
+* JSON array/object and out-of-range numbers → `400 INVALID_PARAMETER`.
+* An empty value `v.x=` binds an empty string.
 * A `$let(@min, ...)` that collides with a request parameter → `400 VARIABLE_REDEFINED`.
 * Variables are not leaked from one request to another under concurrency.
 

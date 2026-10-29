@@ -1,8 +1,8 @@
 # FunQuery HTTP API
 
 This document specifies the HTTP surface of the ASP.NET Core adapter. It currently covers Milestone
-5.1–5.3 (GET, the error contract, and registered sources); variables, POST, and execution limits are
-added in later stages of [`Milestone5.md`](Milestone5.md).
+5.1–5.4 (GET, the error contract, registered sources, and query variables); POST and execution limits
+are added in later stages of [`Milestone5.md`](Milestone5.md).
 
 ## Endpoint
 
@@ -38,6 +38,47 @@ curl "http://localhost:5000/query?source=orders&q=%24source(%40source).%24filter
 The schema is known before loading, so an unknown field or a wrong comparison is rejected without
 reading the source. The selected rows are validated against the schema; a mismatch is `TYPE_MISMATCH`.
 See [`Sources.md`](Sources.md) for registration, the row contract, capabilities, and limits.
+
+## Variables
+
+Every query parameter named `v.<name>` becomes the variable `@name`:
+
+```bash
+curl "http://localhost:5000/query?source=orders&v.min=100&q=%24source(%40source).%24filter(total%20gt%20%40min)"
+```
+
+| Rule | Detail |
+| ---- | ------ |
+| Name | ASCII letter or `_` first, then ASCII letters, digits, and `_`. Case-sensitive. `source` is reserved for the selected source |
+| JSON scalar | If the URL-decoded value parses as a JSON scalar, its type is used: `"Ana"` → `string`, `123` → number, `true`/`false` → `bool`, `null` → `null` |
+| Bare text | Anything that is not a JSON scalar is a `string`: `Ana`, `hello world`, `00123`, and an empty value `v.x=` |
+| Numbers | The literal rules apply: `int` if it fits 32 bits, `long` if it fits 64 bits, `decimal` otherwise. A fraction or exponent becomes `decimal`. Outside the decimal range is `INVALID_PARAMETER` |
+| Dates | There is no JSON date type; pass the text and convert it in the query: `$date(@raw)` |
+| Arrays and objects | Rejected in v1 (`INVALID_PARAMETER`) |
+
+Variables are read-only for the request. `$let(@name, ...)` on an externally supplied name is
+`VARIABLE_REDEFINED`; there is no shadowing. Each request has its own environment, so concurrent
+requests never see each other's values.
+
+```text
+?q=$source(@source).$filter(id gt @min).$select(id, customer)&source=orders&v.min=1
+?q=$source([1]).$map(@label)&v.label="Ana"
+?q=$source([1]).$map(@active)&v.active=true
+?q=$source([{d: '2024-06-01'}]).$filter($date(d) gt $date(@since)).$count()&v.since=2024-03-01
+```
+
+Errors:
+
+| Situation | Code |
+| --------- | ---- |
+| Name is empty, not an identifier, or is `source` | `INVALID_PARAMETER` (`400`) |
+| Same `v.<name>` supplied twice | `INVALID_PARAMETER` (`400`) |
+| More than `MaxParameters` variables | `INVALID_PARAMETER` (`400`) |
+| A value longer than `MaxParameterValueLength` | `INVALID_PARAMETER` (`400`) |
+| JSON number outside the supported range | `INVALID_PARAMETER` (`400`) |
+| JSON array or object | `INVALID_PARAMETER` (`400`) |
+| `@name` is not supplied | `UNDEFINED_VARIABLE` (`400`) |
+| `$let` redefines a supplied variable | `VARIABLE_REDEFINED` (`400`) |
 
 ## Error envelope
 
@@ -97,6 +138,8 @@ policy can replace the endpoint filter, but the default is part of the API contr
 | `MaxTokens` | 1024 | `TOO_MANY_TOKENS` (`400`) |
 | `MaxDepth` | 64 (absolute maximum 256) | `MAX_DEPTH_EXCEEDED` (`400`) |
 | `MaxSourceItems` | 100 000 rows | `SOURCE_TOO_LARGE` (`422`) |
+| `MaxParameters` | 32 | `INVALID_PARAMETER` (`400`) |
+| `MaxParameterValueLength` | 1024 characters | `INVALID_PARAMETER` (`400`) |
 
 Set them at startup:
 
@@ -108,6 +151,8 @@ builder.Services.AddFunQuery(options =>
         MaxInputLength = 4096,
         MaxTokens = 2048,
         MaxDepth = 32,
+        MaxParameters = 16,
+        MaxParameterValueLength = 512,
     };
 });
 ```
@@ -116,7 +161,6 @@ Time and result-size limits arrive in M5.6.
 
 ## Not yet available
 
-* Query variables from the query string (`v.<name>=<value>`) — M5.4.
 * `POST /query` — M5.5.
 * Execution timeout and result-size limits — M5.6.
 * OpenAPI document — M5.7, optional.

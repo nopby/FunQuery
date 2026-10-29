@@ -10,6 +10,9 @@ public class QueryLimitsTests
         Assert.Equal(2048, limits.MaxInputLength);
         Assert.Equal(1024, limits.MaxTokens);
         Assert.Equal(64, limits.MaxDepth);
+        Assert.Equal(100_000, limits.MaxSourceItems);
+        Assert.Equal(32, limits.MaxParameters);
+        Assert.Equal(1024, limits.MaxParameterValueLength);
     }
 
     [Fact]
@@ -65,5 +68,32 @@ public class QueryLimitsTests
 
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new QueryLimits { MaxDepth = QueryLimits.AbsoluteMaxDepth + 1 });
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void MaxSourceItems_MustBeAtLeastOne(int value)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new QueryLimits { MaxSourceItems = value });
+    }
+
+    [Fact]
+    public void MaxParameters_MayBeZeroToDisableVariables()
+    {
+        Assert.Equal(0, new QueryLimits { MaxParameters = 0 }.MaxParameters);
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new QueryLimits { MaxParameters = -1 });
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void MaxParameterValueLength_MustBeAtLeastOne(int value)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new QueryLimits { MaxParameterValueLength = value });
     }
 }
