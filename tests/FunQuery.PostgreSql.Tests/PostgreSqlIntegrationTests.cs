@@ -20,7 +20,17 @@ public sealed class PostgreSqlIntegrationTests : IAsyncLifetime
             ["customer"] = SemanticTypeOptions.String,
             ["total"] = SemanticTypeOptions.Decimal,
             ["ordered_on"] = SemanticTypeOptions.Date,
+            ["nickname"] = SemanticTypeOptions.String,
+            ["active"] = SemanticTypeOptions.Boolean,
         });
+
+    private static readonly IReadOnlyDictionary<string, object?>[] DataRows =
+    [
+        Row(1, "Ana", 10.5m, new DateOnly(2024, 1, 15), "ana", true),
+        Row(2, "Budi", 5m, new DateOnly(2024, 2, 3), null, false),
+        Row(3, "Citra", 20m, new DateOnly(2024, 3, 21), "ci", true),
+        Row(4, "O'Reilly\n", 7m, new DateOnly(2024, 4, 1), null, null),
+    ];
 
     private string? _connectionString;
     private NpgsqlDataSource? _dataSource;
@@ -40,26 +50,32 @@ public sealed class PostgreSqlIntegrationTests : IAsyncLifetime
                 "id" integer PRIMARY KEY,
                 "customer" text NOT NULL,
                 "total" numeric NOT NULL,
-                "ordered_on" date NOT NULL
+                "ordered_on" date NOT NULL,
+                "nickname" text,
+                "active" boolean
             );
-            INSERT INTO "{TableName}" ("id", "customer", "total", "ordered_on") VALUES
-                (1, 'Ana', 10.5, DATE '2024-01-15'),
-                (2, 'Budi', 5, DATE '2024-02-03'),
-                (3, 'Citra', 20, DATE '2024-03-21');
+            INSERT INTO "{TableName}"
+                ("id", "customer", "total", "ordered_on", "nickname", "active") VALUES
+                (1, 'Ana', 10.5, DATE '2024-01-15', 'ana', TRUE),
+                (2, 'Budi', 5, DATE '2024-02-03', NULL, FALSE),
+                (3, 'Citra', 20, DATE '2024-03-21', 'ci', TRUE);
             """))
         {
             await command.ExecuteNonQueryAsync();
         }
 
         await using (var insert = _dataSource.CreateCommand($"""
-            INSERT INTO "{TableName}" ("id", "customer", "total", "ordered_on")
-            VALUES (@id, @customer, @total, @ordered_on)
+            INSERT INTO "{TableName}"
+                ("id", "customer", "total", "ordered_on", "nickname", "active")
+            VALUES (@id, @customer, @total, @ordered_on, @nickname, @active)
             """))
         {
             insert.Parameters.AddWithValue("id", 4);
             insert.Parameters.AddWithValue("customer", "O'Reilly\n");
             insert.Parameters.AddWithValue("total", 7m);
             insert.Parameters.AddWithValue("ordered_on", new DateOnly(2024, 4, 1));
+            insert.Parameters.AddWithValue("nickname", DBNull.Value);
+            insert.Parameters.AddWithValue("active", DBNull.Value);
 
             await insert.ExecuteNonQueryAsync();
         }
@@ -125,7 +141,8 @@ public sealed class PostgreSqlIntegrationTests : IAsyncLifetime
             "$source(@source).$sort(id).$first(id gt 2)");
 
         Assert.Equal(
-            "{\"id\":3,\"customer\":\"Citra\",\"total\":20,\"ordered_on\":\"2024-03-21\"}",
+            "{\"id\":3,\"customer\":\"Citra\",\"total\":20,\"ordered_on\":\"2024-03-21\"," +
+            "\"nickname\":\"ci\",\"active\":true}",
             ValueJson.Serialize(first));
 
         var dates = await ExecuteAsync(
@@ -203,6 +220,97 @@ public sealed class PostgreSqlIntegrationTests : IAsyncLifetime
         Assert.Equal(QueryErrorCode.OrderRequired, error.Code);
     }
 
+    [Fact]
+    public async Task ParityFilterProjectSortPaginationAndAggregates()
+    {
+        if (_dataSource is null) return;
+
+        await AssertParityAsync(
+            "$source(@source).$filter(total gt 10).$select(id, customer)");
+
+        await AssertParityAsync(
+            "$source(@source).$sort(id, desc).$take(2).$select(id)");
+
+        await AssertParityAsync(
+            "$source(@source).$sort(id).$skip(1).$take(2).$select(id)");
+
+        await AssertParityAsync("$source(@source).$count()");
+        await AssertParityAsync("$source(@source).$any(active)");
+        await AssertParityAsync("$source(@source).$sort(id).$first(total gt 10)");
+
+        await AssertParityAsync(
+            "$source(@source).$sort(id).$map($index())");
+
+        await AssertParityAsync(
+            "$source(@source).$sort(id).$filter($index() lt 2).$select(id)");
+
+        await AssertParityAsync(
+            "$source(@source).$sort(id).$filter($index(1) lt 3).$select(id)");
+    }
+
+    [Fact]
+    public async Task ParityStringsDatesNullsAndCoalesce()
+    {
+        if (_dataSource is null) return;
+
+        await AssertParityAsync(
+            "$source(@source).$filter(customer contains 'a').$select(id)");
+
+        await AssertParityAsync(
+            "$source(@source).$filter(customer startswith 'A').$select(id)");
+
+        await AssertParityAsync(
+            "$source(@source).$filter(customer endswith 'a').$select(id)");
+
+        await AssertParityAsync(
+            "$source(@source).$filter($lower(customer) eq 'ana').$select(id)");
+
+        await AssertParityAsync(
+            "$source(@source).$filter(ordered_on gt $date('2024-02-01')).$select(id)");
+
+        await AssertParityAsync(
+            "$source(@source).$filter(nickname eq null).$select(id)");
+
+        await AssertParityAsync(
+            "$source(@source).$filter(nickname neq null).$select(id)");
+
+        await AssertParityAsync(
+            "$source(@source).$filter(not active).$select(id)");
+
+        await AssertParityAsync(
+            "$source(@source).$filter(active or total gt 15).$select(id)");
+
+        await AssertParityAsync(
+            "$source(@source).$select({name: $coalesce(nickname, 'none')})" +
+            ".$sort(name).$select(name)");
+
+        await AssertParityAsync(
+            "$source(@source).$distinct(nickname).$count()");
+    }
+
+    private async Task AssertParityAsync(
+        string query,
+        params (string Name, SemanticType Type, object? Value)[] variables)
+    {
+        var environment = EnvironmentWith(variables);
+        var plan = new QueryEngine().Prepare(query, environment);
+
+        var inMemory = new QueryEngine()
+            .ExecutePlan(plan, environment)
+            .ToJson();
+
+        await using var source = new PostgreSqlSource(
+            "orders",
+            Schema,
+            TableName,
+            _dataSource!);
+
+        var sql = ValueJson.Serialize(
+            await source.ExecuteAsync(plan, environment));
+
+        Assert.Equal(inMemory, sql);
+    }
+
     private async Task<object?> ExecuteAsync(
         string query,
         QueryEnvironment? environment = null,
@@ -224,13 +332,32 @@ public sealed class PostgreSqlIntegrationTests : IAsyncLifetime
     private static QueryEnvironment EnvironmentWith(
         params (string Name, SemanticType Type, object? Value)[] variables)
     {
+        var rows = SourceRows.Materialize("orders", Schema, DataRows);
+
         var environment = QueryEnvironment.From(
             "source",
-            new QueryParameter(new ArrayType(Schema), null));
+            new QueryParameter(new ArrayType(Schema), rows));
 
         foreach (var (name, type, value) in variables)
             environment = environment.With(name, new QueryParameter(type, value));
 
         return environment;
     }
+
+    private static IReadOnlyDictionary<string, object?> Row(
+        int id,
+        string customer,
+        decimal total,
+        DateOnly orderedOn,
+        string? nickname,
+        bool? active) =>
+        new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["id"] = id,
+            ["customer"] = customer,
+            ["total"] = total,
+            ["ordered_on"] = orderedOn,
+            ["nickname"] = nickname,
+            ["active"] = active,
+        };
 }

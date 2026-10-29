@@ -109,7 +109,9 @@ It does **not** need a new parser, analyzer, plan builder, or result model.
   SQL row order is unspecified and the result would not be reproducible.
 * **`$distinct(key)`:** `SELECT DISTINCT ON (key)`. The language does not require preserving "first
   occurrence" order in SQL; order after `$distinct` is unspecified unless followed by `$sort`.
-* **`$index`:** `ROW_NUMBER() OVER (ORDER BY ...)`, requiring an explicit `$sort` for a meaningful value.
+* **`$index`:** `ROW_NUMBER() OVER (ORDER BY ...)`, requiring an explicit `$sort`. In a predicate it is
+  computed in a derived table first, because PostgreSQL does not allow window functions in `WHERE`.
+  `$index(base)` adds the base parameter to the zero-based position.
 * **`$first` / `$any` / `$count`:** `LIMIT 1`, `EXISTS (...)`, `COUNT(*)`.
 * **`$coalesce`:** `COALESCE(...)`.
 * **`$select` / `$map`:** projection. Scalar projections are v1; object projections use
@@ -167,6 +169,13 @@ Host=127.0.0.1;Port=5433;Username=postgres;Password=postgres;Database=postgres
 
 The sample `hosts/FunQuery.PostgreSql.Server` reads `PostgreSql:ConnectionString` or
 `FUNQUERY_POSTGRES` and exposes a registered `orders` source.
+
+## Parity (M6.4)
+
+The integration suite runs the same `QueryPlan` through the in-memory interpreter and `PostgreSqlSource`
+and compares the JSON. The covered subset includes filtering, projection, sorting, pagination,
+`$count`/`$any`/`$first`, `$index`, strings, dates, nulls, `$coalesce`, and `$distinct`. Unsupported
+features fail with a stable code rather than a different result.
 
 ## Security
 

@@ -295,4 +295,25 @@ public class PlanBuilderTests
         Assert.Equal("value", field.Name);
         Assert.IsType<CurrentRow>(field.Value);
     }
+
+    [Fact]
+    public void DynamicFieldNamesFromRequestParametersAreRejected()
+    {
+        var environment = SourceEnvironment(OrderSchema).With(
+            "col",
+            new QueryParameter(SemanticTypeOptions.String, "id"));
+
+        const string query = "$source(@source).$map($field(@col))";
+
+        var ast = new QueryEngine().Prepare(query, environment).Expression;
+
+        var error = Assert.Throws<QueryException>(
+            () => PlanBuilder.Build(
+                query,
+                ast,
+                Sources(OrderSchema),
+                environment));
+
+        Assert.Equal(QueryErrorCode.NotSupported, error.Code);
+    }
 }

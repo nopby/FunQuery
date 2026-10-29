@@ -28,7 +28,7 @@ one starts.
 | M6.1  | Provider contract and relational plan      | —          | L    | ✅     |
 | M6.2  | SQL core and PostgreSQL dialect            | M6.1       | L    | ✅     |
 | M6.3  | PostgreSQL execution and sources           | M6.2       | L    | ✅     |
-| M6.4  | Semantic parity and capability enforcement | M6.3       | M    | ⏳     |
+| M6.4  | Semantic parity and capability enforcement | M6.3       | M    | ✅     |
 | M6.5  | HTTP integration and hardening             | M6.4       | M    | ⏳     |
 | M6.6  | Documentation and close-out                | M6.1–M6.5  | S    | ⏳     |
 
@@ -255,6 +255,20 @@ one starts.
 
 * Every query in the supported subset has a parity test.
 * Unsupported features fail with a stable code, never a different result.
+
+### Result
+
+* `$index` is supported via `ROW_NUMBER() OVER (ORDER BY ...)`; a predicate that uses `$index` is
+  rewritten through a derived table, because PostgreSQL does not allow window functions in `WHERE`.
+  `$index` still requires an explicit `$sort`.
+* Dynamic `$field(@requestParameter)` is rejected by the SQL plan builder; literal and `$let` field
+  names remain supported.
+* The parity suite runs the same `QueryPlan` through the in-memory interpreter and `PostgreSqlSource`
+  and compares JSON for filter, projection, sort, pagination, count/any/first, `$index`, strings,
+  dates, nulls, `$coalesce`, and `$distinct`.
+* `tests/FunQuery.PostgreSql.Tests` now has 45 tests: 28 golden SQL, 4 parameter binder, 4 row reader,
+  and 9 live integration/parity tests.
+* Full suite: 1141 tests green against PostgreSQL 18.
 
 ---
 

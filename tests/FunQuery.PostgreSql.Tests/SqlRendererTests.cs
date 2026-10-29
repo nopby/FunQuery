@@ -369,10 +369,6 @@ public class SqlRendererTests
             QueryErrorCode.NotSupported);
 
         AssertRejected(
-            "$source(@source).$map($index())",
-            QueryErrorCode.NotSupported);
-
-        AssertRejected(
             "$source(@source).$select({row: ~})",
             QueryErrorCode.NotSupported);
 
@@ -384,4 +380,67 @@ public class SqlRendererTests
             "$source(@source).$map($length('😀'))",
             QueryErrorCode.NotSupported);
     }
+
+    [Fact]
+    public void IndexRendersRowNumberAfterSort()
+    {
+        AssertSql(
+            "$source(@source).$sort(id).$map($index())",
+            "SELECT CAST((ROW_NUMBER() OVER (ORDER BY \"id\" ASC NULLS FIRST) - 1) AS integer) " +
+            "FROM \"orders\" ORDER BY \"id\" ASC NULLS FIRST");
+    }
+
+    [Fact]
+    public void IndexBaseRendersAnOffsetParameter()
+    {
+        AssertSql(
+            "$source(@source).$sort(id).$map($index(1))",
+            "SELECT CAST(((ROW_NUMBER() OVER (ORDER BY \"id\" ASC NULLS FIRST) - 1) + @p0) AS integer) " +
+            "FROM \"orders\" ORDER BY \"id\" ASC NULLS FIRST",
+            ("@p0", 1));
+    }
+
+    [Fact]
+    public void IndexInPredicateUsesADerivedTable()
+    {
+        AssertSql(
+            "$source(@source).$sort(id).$filter($index() lt 2)",
+            "SELECT * FROM (" +
+            "SELECT *, CAST((ROW_NUMBER() OVER (ORDER BY \"id\" ASC NULLS FIRST) - 1) AS integer) " +
+            "AS \"__fq_index\" " +
+            "FROM (SELECT * FROM \"orders\" ORDER BY \"id\" ASC NULLS FIRST) AS \"t0\" " +
+            "ORDER BY \"id\" ASC NULLS FIRST" +
+            ") AS \"t1\" " +
+            "WHERE COALESCE((\"__fq_index\" < @p0), FALSE) " +
+            "ORDER BY \"id\" ASC NULLS FIRST",
+            ("@p0", 2));
+    }
+
+    [Fact]
+    public void IndexBaseInPredicateUsesTheSyntheticColumn()
+    {
+        AssertSql(
+            "$source(@source).$sort(id).$filter($index(1) lt 3)",
+            "SELECT * FROM (" +
+            "SELECT *, CAST((ROW_NUMBER() OVER (ORDER BY \"id\" ASC NULLS FIRST) - 1) AS integer) " +
+            "AS \"__fq_index\" " +
+            "FROM (SELECT * FROM \"orders\" ORDER BY \"id\" ASC NULLS FIRST) AS \"t0\" " +
+            "ORDER BY \"id\" ASC NULLS FIRST" +
+            ") AS \"t1\" " +
+            "WHERE COALESCE(((\"__fq_index\" + @p0) < @p1), FALSE) " +
+            "ORDER BY \"id\" ASC NULLS FIRST",
+            ("@p0", 1),
+            ("@p1", 3));
+    }
+
+    [Fact]
+    public void IndexWithoutSortRequiresOrder()
+    {
+        AssertRejected(
+            "$source(@source).$map($index())",
+            QueryErrorCode.OrderRequired);
+    }
 }
+
+
+

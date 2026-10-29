@@ -223,7 +223,7 @@ curl "http://localhost:5000/query?source=orders&q=%24source(%40source).%24filter
 ```
 
 The sample expects an `orders` table with `id integer`, `customer text`, `total numeric`, and
-`ordered_on date`. M6.3 is implemented; M6.4 adds the full semantic parity pass.
+`ordered_on date`. M6.3–M6.4 are implemented; M6.5 adds provider hardening and the AOT assessment.
 
 See [`docs/Milestone6.md`](docs/Milestone6.md) for the staged plan,
 [`docs/HttpApi.md`](docs/HttpApi.md) for the GET/POST endpoints, variables, limits, security, and error

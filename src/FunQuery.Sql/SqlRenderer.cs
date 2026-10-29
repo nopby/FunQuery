@@ -18,6 +18,7 @@ public sealed class SqlRenderer
     private readonly List<SqlParameter> _parameters = [];
     private QueryEnvironment _environment = QueryEnvironment.Empty;
     private int _subqueryIndex;
+    private string? _indexColumnAlias;
 
     public SqlRenderer(
         ISqlDialect dialect,
@@ -43,6 +44,7 @@ public sealed class SqlRenderer
         _environment = environment;
         _parameters.Clear();
         _subqueryIndex = 0;
+        _indexColumnAlias = null;
 
         var query = BuildPlan(plan);
         var sql = _writer.Write(query);
@@ -92,7 +94,11 @@ public sealed class SqlRenderer
     private SqlQuery ApplyFilter(Filter filter)
     {
         var input = BuildPlan(filter.Input);
-        var predicate = RenderBoolean(filter.Predicate);
+
+        if (ContainsIndex(filter.Predicate))
+            return ApplyPredicate(input, filter.Predicate, input.OrderBy);
+
+        var predicate = RenderBoolean(filter.Predicate, input.OrderBy);
 
         if (CanExtend(input))
         {
@@ -113,7 +119,7 @@ public sealed class SqlRenderer
 
         var projections = project.Projections
             .Select(projection => new SqlProjection(
-                RenderValue(projection.Expression),
+                RenderValue(projection.Expression, input.OrderBy),
                 AliasFor(projection)))
             .ToArray();
 
@@ -126,12 +132,16 @@ public sealed class SqlRenderer
     private SqlQuery ApplySort(Sort sort)
     {
         var input = BuildPlan(sort.Input);
-        var key = ApplyCollation(RenderValue(sort.Key), sort.Key.Type);
+        var key = ApplyCollation(
+            RenderValue(sort.Key, input.OrderBy),
+            sort.Key.Type);
+
         var order = new SqlOrder(key, sort.Descending, NullsFirst: !sort.Descending);
 
         if (input.DistinctOn.Count == 0 &&
             input.Limit is null &&
-            input.Offset is null)
+            input.Offset is null &&
+            IsStar(input))
         {
             return input with { OrderBy = [order] };
         }
@@ -142,7 +152,7 @@ public sealed class SqlRenderer
     private SqlQuery ApplyTake(Take take)
     {
         var input = BuildPlan(take.Input);
-        var count = RenderScalar(take.Count);
+        var count = RenderScalar(take.Count, []);
 
         RequireOrder(input);
 
@@ -159,7 +169,7 @@ public sealed class SqlRenderer
     private SqlQuery ApplySkip(Skip skip)
     {
         var input = BuildPlan(skip.Input);
-        var count = RenderScalar(skip.Count);
+        var count = RenderScalar(skip.Count, []);
 
         RequireOrder(input);
 
@@ -189,7 +199,16 @@ public sealed class SqlRenderer
             };
         }
 
-        var key = ApplyCollation(RenderValue(distinct.Key), distinct.Key.Type);
+        if (ContainsIndex(distinct.Key))
+        {
+            throw NotSupported(
+                "$index is not supported in a $distinct key by this provider.");
+        }
+
+        var key = ApplyCollation(
+            RenderValue(distinct.Key, input.OrderBy),
+            distinct.Key.Type);
+
         var keyed = Wrap(input);
 
         return keyed with
@@ -216,10 +235,11 @@ public sealed class SqlRenderer
 
     private SqlQuery ApplyAny(Any any)
     {
-        var inner = Wrap(BuildPlan(any.Input));
+        var input = BuildPlan(any.Input);
+        var inner = Wrap(input);
 
         if (any.Predicate is not null)
-            inner = inner with { Where = RenderBoolean(any.Predicate) };
+            inner = ApplyPredicate(inner, any.Predicate, input.OrderBy);
 
         return new SqlQuery(
             [new SqlProjection(new SqlExists(inner), null)],
@@ -235,30 +255,86 @@ public sealed class SqlRenderer
     private SqlQuery ApplyFirst(First first)
     {
         var input = BuildPlan(first.Input);
-
         var inner = Wrap(input) with { OrderBy = input.OrderBy };
 
         if (first.Predicate is not null)
-            inner = inner with { Where = RenderBoolean(first.Predicate) };
+            inner = ApplyPredicate(inner, first.Predicate, input.OrderBy);
 
         return inner with { Limit = new SqlLiteral("1") };
     }
 
-    private SqlQuery Wrap(SqlQuery query)
+    private SqlQuery ApplyPredicate(
+        SqlQuery query,
+        PlanExpression predicate,
+        IReadOnlyList<SqlOrder> order)
     {
-        var alias = "t" + _subqueryIndex.ToString(CultureInfo.InvariantCulture);
-        _subqueryIndex++;
+        if (!ContainsIndex(predicate))
+            return query with { Where = RenderBoolean(predicate, order) };
+
+        var indexed = AddIndexColumn(query, order, out var alias);
+        var outer = Wrap(indexed) with { OrderBy = order };
+        var previous = _indexColumnAlias;
+        _indexColumnAlias = alias;
+
+        try
+        {
+            return outer with { Where = RenderBoolean(predicate, order) };
+        }
+        finally
+        {
+            _indexColumnAlias = previous;
+        }
+    }
+
+    private SqlQuery AddIndexColumn(
+        SqlQuery source,
+        IReadOnlyList<SqlOrder> order,
+        out string alias)
+    {
+        if (order.Count == 0)
+        {
+            throw new QueryException(
+                QueryErrorCode.OrderRequired,
+                "$index requires an explicit $sort before it.");
+        }
+
+        var subqueryAlias = NextAlias();
+        alias = "__fq_index";
+
+        var rowNumber = new SqlRaw(
+            $"ROW_NUMBER() OVER (ORDER BY {RenderOrder(order)})");
+
+        var zeroBased = new SqlBinary("-", rowNumber, new SqlLiteral("1"));
+        var indexExpression = new SqlRaw(
+            $"CAST({_writer.WriteExpression(zeroBased)} AS integer)");
 
         return new SqlQuery(
+            [
+                new SqlProjection(SqlStar.Instance, null),
+                new SqlProjection(indexExpression, alias),
+            ],
+            new SqlSubquerySource(source, subqueryAlias),
+            null,
+            order,
+            null,
+            null,
+            Distinct: false,
+            DistinctOn: []);
+    }
+
+    private SqlQuery Wrap(SqlQuery query) =>
+        new(
             [new SqlProjection(SqlStar.Instance, null)],
-            new SqlSubquerySource(query, alias),
+            new SqlSubquerySource(query, NextAlias()),
             null,
             [],
             null,
             null,
             Distinct: false,
             DistinctOn: []);
-    }
+
+    private string NextAlias() =>
+        "t" + _subqueryIndex++.ToString(CultureInfo.InvariantCulture);
 
     private static bool CanExtend(SqlQuery query) =>
         !query.Distinct &&
@@ -290,6 +366,19 @@ public sealed class SqlRenderer
         return projection.Key;
     }
 
+    private static bool ContainsIndex(PlanExpression expression) =>
+        expression switch
+        {
+            IndexExpression => true,
+            Binary binary => ContainsIndex(binary.Left) || ContainsIndex(binary.Right),
+            Logical logical => ContainsIndex(logical.Left) || ContainsIndex(logical.Right),
+            Not not => ContainsIndex(not.Operand),
+            Call call => call.Arguments.Any(ContainsIndex),
+            Field field => ContainsIndex(field.Target),
+            Subquery => false,
+            _ => false,
+        };
+
     private void RequireOrder(SqlQuery input)
     {
         if (input.OrderBy.Count == 0)
@@ -300,34 +389,42 @@ public sealed class SqlRenderer
         }
     }
 
-    private SqlExpression RenderValue(PlanExpression expression) =>
-        expression.Type is BooleanType
-            ? RenderBoolean(expression)
-            : RenderScalar(expression);
+    private string RenderOrder(IReadOnlyList<SqlOrder> order) =>
+        string.Join(", ", order.Select(_writer.WriteOrder));
 
-    private SqlExpression RenderScalar(PlanExpression expression) =>
+    private SqlExpression RenderValue(
+        PlanExpression expression,
+        IReadOnlyList<SqlOrder> order) =>
+        expression.Type is BooleanType
+            ? RenderBoolean(expression, order)
+            : RenderScalar(expression, order);
+
+    private SqlExpression RenderScalar(
+        PlanExpression expression,
+        IReadOnlyList<SqlOrder> order) =>
         expression switch
         {
             Column column => new SqlColumn(column.Path),
             Literal literal => RenderLiteral(literal),
             Parameter parameter => RenderParameter(parameter),
-            Call call => RenderCall(call),
-            Binary binary => RenderBoolean(binary),
-            Logical logical => RenderBoolean(logical),
-            Not not => RenderBoolean(not),
+            Call call => RenderCall(call, order),
+            Binary binary => RenderBoolean(binary, order),
+            Logical logical => RenderBoolean(logical, order),
+            Not not => RenderBoolean(not, order),
             Subquery subquery => new SqlSubquery(BuildPlan(subquery.Plan)),
+            IndexExpression index => RenderIndex(index, order),
             CurrentRow => throw NotSupported(
                 "The current row is not a SQL scalar; use $field or a projection."),
             ObjectConstruct or ArrayConstruct => throw NotSupported(
                 "JSON projection is not supported by this provider."),
-            IndexExpression => throw NotSupported(
-                "$index requires a window function, which this provider does not support yet."),
             Field => throw NotSupported(
                 "Field access on a computed value is not supported by this provider."),
             _ => throw NotSupported("Unsupported plan expression."),
         };
 
-    private SqlExpression RenderBoolean(PlanExpression expression) =>
+    private SqlExpression RenderBoolean(
+        PlanExpression expression,
+        IReadOnlyList<SqlOrder> order) =>
         expression switch
         {
             Literal { Value: bool value } =>
@@ -336,41 +433,50 @@ public sealed class SqlRenderer
             Binary
             {
                 Operator: ComparisonOperator.Equal or ComparisonOperator.NotEqual,
-            } binary => RenderEquality(binary),
+            } binary => RenderEquality(binary, order),
 
             Binary binary when binary.Operator is
                 ComparisonOperator.GreaterThan or
                 ComparisonOperator.GreaterThanOrEqual or
                 ComparisonOperator.LessThan or
                 ComparisonOperator.LessThanOrEqual =>
-                Coalesce(RenderOrderedComparison(binary)),
+                Coalesce(RenderOrderedComparison(binary, order)),
 
             Binary { Operator: ComparisonOperator.In } binary =>
-                Coalesce(RenderIn(binary)),
+                Coalesce(RenderIn(binary, order)),
 
             Binary binary when binary.Operator is
                 ComparisonOperator.Contains or
                 ComparisonOperator.StartsWith or
                 ComparisonOperator.EndsWith =>
-                Coalesce(RenderTextComparison(binary)),
+                Coalesce(RenderTextComparison(binary, order)),
 
             Logical logical => new SqlBinary(
                 logical.Operator == LogicalOperator.And ? "AND" : "OR",
-                RenderBoolean(logical.Left),
-                RenderBoolean(logical.Right)),
+                RenderBoolean(logical.Left, order),
+                RenderBoolean(logical.Right, order)),
 
-            Not not => new SqlUnary("NOT", RenderBoolean(not.Operand)),
+            Not not => new SqlUnary(
+                "NOT",
+                RenderBoolean(not.Operand, order)),
 
             Subquery subquery =>
                 Coalesce(new SqlSubquery(BuildPlan(subquery.Plan))),
 
-            _ => Coalesce(RenderScalar(expression)),
+            _ => Coalesce(RenderScalar(expression, order)),
         };
 
-    private SqlExpression RenderEquality(Binary binary)
+    private SqlExpression RenderEquality(
+        Binary binary,
+        IReadOnlyList<SqlOrder> order)
     {
-        var left = ApplyCollation(RenderScalar(binary.Left), binary.Left.Type);
-        var right = ApplyCollation(RenderScalar(binary.Right), binary.Right.Type);
+        var left = ApplyCollation(
+            RenderScalar(binary.Left, order),
+            binary.Left.Type);
+
+        var right = ApplyCollation(
+            RenderScalar(binary.Right, order),
+            binary.Right.Type);
 
         return new SqlRaw(_dialect.RenderEquality(
             _writer.WriteExpression(left),
@@ -378,7 +484,9 @@ public sealed class SqlRenderer
             binary.Operator == ComparisonOperator.NotEqual));
     }
 
-    private SqlExpression RenderOrderedComparison(Binary binary)
+    private SqlExpression RenderOrderedComparison(
+        Binary binary,
+        IReadOnlyList<SqlOrder> order)
     {
         var op = binary.Operator switch
         {
@@ -389,16 +497,23 @@ public sealed class SqlRenderer
             _ => throw NotSupported("Unsupported comparison operator."),
         };
 
-        var left = ApplyCollation(RenderScalar(binary.Left), binary.Left.Type);
-        var right = ApplyCollation(RenderScalar(binary.Right), binary.Right.Type);
+        var left = ApplyCollation(
+            RenderScalar(binary.Left, order),
+            binary.Left.Type);
+
+        var right = ApplyCollation(
+            RenderScalar(binary.Right, order),
+            binary.Right.Type);
 
         return new SqlBinary(op, left, right);
     }
 
-    private SqlExpression RenderTextComparison(Binary binary)
+    private SqlExpression RenderTextComparison(
+        Binary binary,
+        IReadOnlyList<SqlOrder> order)
     {
-        var text = RenderScalar(binary.Left);
-        var part = RenderScalar(binary.Right);
+        var text = RenderScalar(binary.Left, order);
+        var part = RenderScalar(binary.Right, order);
 
         var sql = binary.Operator switch
         {
@@ -420,7 +535,9 @@ public sealed class SqlRenderer
         return new SqlRaw(sql);
     }
 
-    private SqlExpression RenderIn(Binary binary)
+    private SqlExpression RenderIn(
+        Binary binary,
+        IReadOnlyList<SqlOrder> order)
     {
         if (binary.Right is not ArrayConstruct array)
         {
@@ -431,7 +548,10 @@ public sealed class SqlRenderer
         if (array.Elements.Count == 0)
             return new SqlLiteral("FALSE");
 
-        var left = ApplyCollation(RenderScalar(binary.Left), binary.Left.Type);
+        var left = ApplyCollation(
+            RenderScalar(binary.Left, order),
+            binary.Left.Type);
+
         var values = new List<string>();
         var hasNull = false;
 
@@ -443,7 +563,10 @@ public sealed class SqlRenderer
                 continue;
             }
 
-            var value = ApplyCollation(RenderScalar(element), element.Type);
+            var value = ApplyCollation(
+                RenderScalar(element, order),
+                element.Type);
+
             values.Add(_writer.WriteExpression(value));
         }
 
@@ -467,6 +590,39 @@ public sealed class SqlRenderer
         }
 
         return result ?? new SqlLiteral("FALSE");
+    }
+
+    private SqlExpression RenderIndex(
+        IndexExpression index,
+        IReadOnlyList<SqlOrder> order)
+    {
+        if (_indexColumnAlias is not null)
+        {
+            var column = new SqlColumn(_indexColumnAlias);
+
+            return index.Base is null
+                ? column
+                : new SqlBinary("+", column, RenderScalar(index.Base, order));
+        }
+
+        if (order.Count == 0)
+        {
+            throw new QueryException(
+                QueryErrorCode.OrderRequired,
+                "$index requires an explicit $sort before it.");
+        }
+
+        var rowNumber = new SqlRaw(
+            $"ROW_NUMBER() OVER (ORDER BY {RenderOrder(order)})");
+
+        var zeroBased = new SqlBinary("-", rowNumber, new SqlLiteral("1"));
+
+        var value = index.Base is null
+            ? zeroBased
+            : new SqlBinary("+", zeroBased, RenderScalar(index.Base, order));
+
+        return new SqlRaw(
+            $"CAST({_writer.WriteExpression(value)} AS integer)");
     }
 
     private SqlExpression RenderLiteral(Literal literal)
@@ -500,21 +656,26 @@ public sealed class SqlRenderer
         return new SqlParameterRef(name);
     }
 
-    private SqlExpression RenderCall(Call call) =>
+    private SqlExpression RenderCall(
+        Call call,
+        IReadOnlyList<SqlOrder> order) =>
         call.Name switch
         {
-            "$lower" => RenderCaseFunction("lower", call),
-            "$upper" => RenderCaseFunction("upper", call),
-            "$length" => RenderLength(call),
+            "$lower" => RenderCaseFunction("lower", call, order),
+            "$upper" => RenderCaseFunction("upper", call, order),
+            "$length" => RenderLength(call, order),
             "$coalesce" => new SqlFunction(
                 "COALESCE",
-                call.Arguments.Select(RenderValue).ToArray()),
-            "$date" => RenderDate(call),
+                call.Arguments.Select(argument => RenderValue(argument, order)).ToArray()),
+            "$date" => RenderDate(call, order),
             _ => throw NotSupported(
                 $"Function '{call.Name}' is not supported by the SQL provider."),
         };
 
-    private SqlExpression RenderCaseFunction(string name, Call call)
+    private SqlExpression RenderCaseFunction(
+        string name,
+        Call call,
+        IReadOnlyList<SqlOrder> order)
     {
         if (call.Arguments[0] is Literal { Value: string text } &&
             text.Any(character => character > 0x7F))
@@ -524,13 +685,15 @@ public sealed class SqlRenderer
         }
 
         var argument = ApplyCollation(
-            RenderScalar(call.Arguments[0]),
+            RenderScalar(call.Arguments[0], order),
             SemanticTypeOptions.String);
 
         return new SqlFunction(name, [argument]);
     }
 
-    private SqlExpression RenderLength(Call call)
+    private SqlExpression RenderLength(
+        Call call,
+        IReadOnlyList<SqlOrder> order)
     {
         if (call.Arguments[0] is Literal { Value: string text } &&
             text.Any(char.IsSurrogate))
@@ -539,10 +702,14 @@ public sealed class SqlRenderer
                 "The provider counts Unicode code points, not UTF-16 code units.");
         }
 
-        return new SqlFunction("length", [RenderScalar(call.Arguments[0])]);
+        return new SqlFunction(
+            "length",
+            [RenderScalar(call.Arguments[0], order)]);
     }
 
-    private SqlExpression RenderDate(Call call)
+    private SqlExpression RenderDate(
+        Call call,
+        IReadOnlyList<SqlOrder> order)
     {
         var argument = call.Arguments[0];
 
@@ -561,7 +728,7 @@ public sealed class SqlRenderer
             return AddParameter(date, SemanticTypeOptions.Date);
         }
 
-        var rendered = RenderScalar(argument);
+        var rendered = RenderScalar(argument, order);
 
         return argument.Type is DateType
             ? rendered

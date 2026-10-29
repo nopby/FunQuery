@@ -21,7 +21,8 @@ public sealed class PostgreSqlDialect : ISqlDialect
         ProviderCapabilities.DateOperations |
         ProviderCapabilities.Aggregation |
         ProviderCapabilities.Distinct |
-        ProviderCapabilities.DistinctOn;
+        ProviderCapabilities.DistinctOn |
+        ProviderCapabilities.WindowFunctions;
 
     public string QuoteIdentifier(string identifier) =>
         "\"" + identifier.Replace("\"", "\"\"") + "\"";

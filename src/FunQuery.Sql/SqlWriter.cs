@@ -111,7 +111,7 @@ public sealed class SqlWriter
                 "Unknown SQL source."),
         };
 
-    private string WriteOrder(SqlOrder order)
+    public string WriteOrder(SqlOrder order)
     {
         var sql = WriteExpression(order.Expression);
         sql += order.Descending ? " DESC" : " ASC";

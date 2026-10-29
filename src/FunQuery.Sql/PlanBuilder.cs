@@ -437,15 +437,10 @@ public sealed class PlanBuilder
         if (_variables.TryGetValue(name, out var bound))
             return ResolveString(bound);
 
-        if (_environment.Parameters.TryGetValue(name, out var parameter) &&
-            parameter.Value is string value)
-        {
-            return value;
-        }
-
         throw new QueryException(
             QueryErrorCode.NotSupported,
-            $"Variable '@{name}' must hold a field name known at plan time.");
+            $"Variable '@{name}' is a request parameter; " +
+            "dynamic field names from request parameters are not supported by the SQL provider.");
     }
 
     private string ResolveString(PlanExpression expression) =>
@@ -453,13 +448,13 @@ public sealed class PlanBuilder
         {
             Literal { Value: string value } => value,
 
-            Parameter parameter
-                when _environment.Parameters.TryGetValue(parameter.Name, out var value) &&
-                     value.Value is string text => text,
+            Parameter => throw new QueryException(
+                QueryErrorCode.NotSupported,
+                "Dynamic field names from request parameters are not supported by the SQL provider."),
 
             _ => throw new QueryException(
                 QueryErrorCode.NotSupported,
-                "The field name must be a literal or a parameter known at plan time."),
+                "The field name must be a literal known at plan time."),
         };
 
     private static bool IsScalarFunction(string name) =>
