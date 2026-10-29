@@ -28,6 +28,15 @@ public sealed class FunQueryOptions
     public string OpenApiRoute { get; set; } = "/openapi/v1.json";
 
     /// <summary>
+    /// Bila true, adapter memetakan UI dokumentasi (Scalar) di <see cref="ApiDocsRoute"/>.
+    /// Membutuhkan <see cref="EnableOpenApi"/>; default false.
+    /// </summary>
+    public bool EnableApiDocs { get; set; }
+
+    /// <summary>Path UI dokumentasi, default <c>/docs</c>.</summary>
+    public string ApiDocsRoute { get; set; } = "/docs";
+
+    /// <summary>
     /// Ukuran maksimum body <c>POST /query</c> dalam byte. Default 64 KB. Body yang lebih besar
     /// ditolak sebagai <c>REQUEST_TOO_LARGE</c> (413) tanpa membaca seluruhnya.
     /// </summary>
@@ -69,6 +78,29 @@ public sealed class FunQueryOptions
             throw new ArgumentException(
                 $"{nameof(OpenApiRoute)} must differ from {nameof(Route)}.",
                 nameof(OpenApiRoute));
+        }
+
+        if (string.IsNullOrWhiteSpace(ApiDocsRoute) ||
+            !ApiDocsRoute.StartsWith('/'))
+        {
+            throw new ArgumentException(
+                $"{nameof(ApiDocsRoute)} must be a non-empty path starting with '/'.",
+                nameof(ApiDocsRoute));
+        }
+
+        if (EnableApiDocs && !EnableOpenApi)
+        {
+            throw new ArgumentException(
+                $"{nameof(EnableApiDocs)} requires {nameof(EnableOpenApi)}.",
+                nameof(EnableApiDocs));
+        }
+
+        if (string.Equals(ApiDocsRoute, Route, StringComparison.Ordinal) ||
+            string.Equals(ApiDocsRoute, OpenApiRoute, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"{nameof(ApiDocsRoute)} must differ from {nameof(Route)} and {nameof(OpenApiRoute)}.",
+                nameof(ApiDocsRoute));
         }
 
         if (MaxRequestBodyBytes < 1)

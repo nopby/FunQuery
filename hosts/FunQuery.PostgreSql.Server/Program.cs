@@ -23,6 +23,7 @@ builder.Services.AddSingleton(dataSource);
 builder.Services.AddFunQuery(options =>
 {
     options.EnableOpenApi = true;
+    options.EnableApiDocs = true;
 });
 
 var ordersSchema = new ObjectType(
@@ -40,6 +41,8 @@ builder.Services.AddFunQuerySources(sources => sources
         .AsQuerySource("orders", ordersSchema)));
 
 var app = builder.Build();
+
+app.UseFunQueryApiDocsSecurityHeaders();
 
 app.MapFunQueryEndpoints();
 

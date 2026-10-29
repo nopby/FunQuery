@@ -33,6 +33,7 @@ public class PlaygroundTests
         Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
         Assert.Contains("FunQuery Playground", html);
         Assert.Contains("/playground/playground.js", html);
+        Assert.Contains("href=\"/docs\"", html);
         Assert.DoesNotContain("http://", html);
         Assert.DoesNotContain("https://", html);
     }

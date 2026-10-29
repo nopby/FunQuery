@@ -20,7 +20,7 @@ semantics.
 | Stage | Name                                      | Depends on | Size | Status |
 | ----- | ----------------------------------------- | ---------- | ---- | ------ |
 | M7.1  | OpenAPI document                           | M6         | M    | ✅     |
-| M7.2  | Interactive API docs UI                    | M7.1       | S    | ⏳     |
+| M7.2  | Interactive API docs UI                    | M7.1       | S    | ✅     |
 | M7.3  | Playground polish and integration          | M7.1       | S    | ⏳     |
 | M7.4  | Local development environment              | M6         | M    | ⏳     |
 | M7.5  | Documentation and close-out                | M7.1–M7.4  | S    | ⏳     |
@@ -102,7 +102,20 @@ semantics.
 ### Definition of Done
 
 * A developer can open the docs page, inspect both endpoints, and try them.
-* Disabling the option removes both the document and the UI.
+* Disabling `EnableApiDocs` removes the UI; disabling `EnableOpenApi` removes the document.
+
+### Result
+
+* The adapter serves Scalar 2.18.2 at `/docs` when `EnableApiDocs` is true; `ApiDocsRoute` is
+  configurable. The UI requires `EnableOpenApi` and points at the configured document URL.
+* The page is rendered by `Scalar.AspNetCore` with bundled assets and no external CDN or fonts.
+* `UseFunQueryApiDocsSecurityHeaders` adds a nonce-based CSP, `X-Content-Type-Options`,
+  `X-Frame-Options`, `Referrer-Policy`, and `Cache-Control: no-store`. The sample hosts call it.
+* The OpenAPI URL is generated from the request scheme/host, so a custom docs route still resolves the
+  document.
+* The playground footer links to `/docs`, and the README links to both the playground and the API docs.
+* 6 new tests (1155 -> 1161) cover enabled/disabled UI, custom routes, the configured OpenAPI URL, and
+  the security headers/nonce. The Native AOT host served `/docs`, `/docs/scalar.js`, and the document.
 
 ---
 
@@ -189,8 +202,8 @@ semantics.
 1. **OpenAPI generator vs static document.** Prefer the built-in generator; fall back to a static
    document if AOT/trimming makes it impractical.
 2. **UI choice.** Scalar is the default recommendation; Swagger UI is an acceptable alternative.
-3. **Gating.** `EnableApiDocs` (and the existing `Playground:Enabled`) default to false; the sample hosts
-   may enable them in Development.
+3. **Gating.** `EnableOpenApi` (document) and `EnableApiDocs` (UI, requires the document) default to
+   false; the sample hosts may enable them in Development.
 4. **Dynamic variables.** `v.<name>` cannot be expressed as a normal OpenAPI parameter; document it as a
    convention with examples.
 5. **Authentication.** None in v1; a host can put the endpoints behind its own auth middleware.

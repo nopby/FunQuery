@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Scalar.AspNetCore;
 
 namespace FunQuery.AspNetCore;
 
@@ -35,6 +36,25 @@ public static class FunQueryEndpointRouteBuilderExtensions
         {
             RequestDelegate openApi = context => WriteOpenApiAsync(context, options);
             endpoints.MapGet(options.OpenApiRoute, openApi);
+        }
+
+        if (options.EnableApiDocs)
+        {
+            endpoints.MapScalarApiReference(options.ApiDocsRoute, (scalar, httpContext) =>
+            {
+                // Scalar memperlakukan route pattern sebagai URL relatif terhadap /docs/.
+                // Pakai URL absolut agar dokumen tetap ditemukan saat ApiDocsRoute diubah.
+                var documentUrl =
+                    $"{httpContext.Request.Scheme}://{httpContext.Request.Host}" +
+                    $"{httpContext.Request.PathBase}{options.OpenApiRoute}";
+
+                scalar
+                    .WithTitle("FunQuery API")
+                    .WithOpenApiRoutePattern(documentUrl)
+                    .DisableDefaultFonts()
+                    .EnableDarkMode()
+                    .WithNonce();
+            });
         }
 
         return endpoints;

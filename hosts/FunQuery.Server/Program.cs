@@ -10,6 +10,9 @@ builder.Services.AddFunQuery(options =>
     options.EnableOpenApi = ReadBool(
         builder.Configuration["OpenApi:Enabled"],
         defaultValue: true);
+    options.EnableApiDocs = ReadBool(
+        builder.Configuration["ApiDocs:Enabled"],
+        defaultValue: true);
 });
 
 var orders = new OrdersSource();
@@ -44,6 +47,11 @@ if (playgroundOptions.Enabled)
     app.UseStaticFiles();
     app.MapFunQueryPlayground(playgroundOptions);
 }
+
+var funQueryOptions = app.Services.GetRequiredService<FunQueryOptions>();
+
+if (funQueryOptions.EnableApiDocs)
+    app.UseFunQueryApiDocsSecurityHeaders(funQueryOptions.ApiDocsRoute);
 
 app.MapFunQueryEndpoints();
 

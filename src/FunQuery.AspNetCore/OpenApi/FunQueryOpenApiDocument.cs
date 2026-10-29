@@ -25,7 +25,7 @@ internal static class FunQueryOpenApiDocument
                 ["version"] = "1.0.0",
                 ["description"] =
                     "Execute FunQuery expressions over inline data or a registered source. " +
-                    "Variables are supplied as v.<name> on GET or in the variables object on POST.",
+                    "Variables are supplied as `v.<name>` on GET or in the variables object on POST.",
             },
             ["servers"] = Array(
                 new JsonObject { ["url"] = "/" }),
@@ -62,7 +62,7 @@ internal static class FunQueryOpenApiDocument
             ["summary"] = "Execute a FunQuery expression",
             ["description"] =
                 "Runs a query against an inline source or a registered source. " +
-                "The selected source is bound to @source. Query variables use v.<name>.",
+                "The selected source is bound to @source. Query variables use `v.<name>`.",
             ["operationId"] = "executeQueryGet",
             ["parameters"] = Array(
                 new JsonObject

@@ -185,10 +185,12 @@ curl "http://localhost:5000/query?source=orders&q=%24source(%40source).%24filter
 
 #### Playground (M6.0a)
 
-Open <http://localhost:5000/playground/> to try queries in the browser. The OpenAPI document is at
-<http://localhost:5000/openapi/v1.json> when `OpenApi:Enabled` is true. The playground is a developer
-tool: it is enabled by `Playground:Enabled` in the sample `appsettings.json`, and source names are only
-listed when `Playground:ExposeSourceNames` is true. Disable both in production.
+Open <http://localhost:5000/playground/> to try queries in the browser, or open
+<http://localhost:5000/docs> for the Scalar API reference. The OpenAPI document is at
+<http://localhost:5000/openapi/v1.json>. The playground and API docs are developer tools: they are
+enabled by `Playground:Enabled`, `OpenApi:Enabled`, and `ApiDocs:Enabled` in the sample
+`appsettings.json`, and source names are only listed when `Playground:ExposeSourceNames` is true.
+Disable them in production.
 
 Query variables are supplied as `v.<name>`:
 

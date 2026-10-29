@@ -230,6 +230,39 @@ GET /openapi/v1.json
 documented as a convention because OpenAPI has no wildcard query parameter. The document is a static,
 AOT-safe JSON document; it does not depend on reflection-based endpoint metadata.
 
+## API docs UI
+
+When `EnableApiDocs` is true, the adapter serves a Scalar API reference at `/docs`:
+
+```http
+GET /docs
+```
+
+`ApiDocsRoute` changes the path. The UI requires `EnableOpenApi`, because it loads the document from
+`OpenApiRoute`; `AddFunQuery` rejects `EnableApiDocs = true` when the document is disabled. Scalar is
+bundled by `Scalar.AspNetCore`, so the page loads no CDN or external fonts.
+
+The sample hosts apply `UseFunQueryApiDocsSecurityHeaders`:
+
+* CSP with a per-request script nonce (`script-src 'self' 'nonce-...'`), `style-src 'self'
+  'unsafe-inline'`, and no external resources;
+* `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`;
+* `Cache-Control: no-store` because the nonce is request-specific.
+
+The UI is opt-in and intended for development. Disable `ApiDocs:Enabled` (and `OpenApi:Enabled` if the
+document is not needed) in production.
+
+```json
+{
+  "OpenApi": {
+    "Enabled": true
+  },
+  "ApiDocs": {
+    "Enabled": true
+  }
+}
+```
+
 ## Playground
 
 The sample host serves a developer playground at `/playground/` when `Playground:Enabled` is true (the
@@ -280,7 +313,9 @@ See [`Sources.md`](Sources.md) for the source whitelist and row contract.
 
 ## Not included
 
-* OpenAPI document. It is optional and was not part of the M5 definition of done.
+* Authentication and authorization; a host can put the endpoints behind its own middleware.
+* Multiple OpenAPI documents or remote OpenAPI document sources.
+* The playground and API docs are opt-in developer tools; they are not part of the production contract.
 
 ## Host setup
 
