@@ -31,7 +31,27 @@ public static class FunQueryEndpointRouteBuilderExtensions
         endpoints.MapGet(options.Route, get);
         endpoints.MapPost(options.Route, post);
 
+        if (options.EnableOpenApi)
+        {
+            RequestDelegate openApi = context => WriteOpenApiAsync(context, options);
+            endpoints.MapGet(options.OpenApiRoute, openApi);
+        }
+
         return endpoints;
+    }
+
+    private static async Task WriteOpenApiAsync(
+        HttpContext context,
+        FunQueryOptions options)
+    {
+        var json = FunQueryOpenApiDocument.Create(
+            options.Route,
+            options.QueryParameter,
+            options.SourceParameter);
+
+        context.Response.ContentType = "application/json; charset=utf-8";
+        context.Response.Headers["Cache-Control"] = "no-store";
+        await context.Response.WriteAsync(json, context.RequestAborted);
     }
 
     private static Task HandleGetAsync(HttpContext context, FunQueryOptions options) =>

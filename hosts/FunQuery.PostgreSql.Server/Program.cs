@@ -20,7 +20,10 @@ if (string.IsNullOrWhiteSpace(connectionString))
 var dataSource = NpgsqlDataSource.Create(connectionString);
 
 builder.Services.AddSingleton(dataSource);
-builder.Services.AddFunQuery();
+builder.Services.AddFunQuery(options =>
+{
+    options.EnableOpenApi = true;
+});
 
 var ordersSchema = new ObjectType(
     new Dictionary<string, SemanticType>(StringComparer.Ordinal)

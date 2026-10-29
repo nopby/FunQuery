@@ -185,7 +185,8 @@ curl "http://localhost:5000/query?source=orders&q=%24source(%40source).%24filter
 
 #### Playground (M6.0a)
 
-Open <http://localhost:5000/playground/> to try queries in the browser. The playground is a developer
+Open <http://localhost:5000/playground/> to try queries in the browser. The OpenAPI document is at
+<http://localhost:5000/openapi/v1.json> when `OpenApi:Enabled` is true. The playground is a developer
 tool: it is enabled by `Playground:Enabled` in the sample `appsettings.json`, and source names are only
 listed when `Playground:ExposeSourceNames` is true. Disable both in production.
 

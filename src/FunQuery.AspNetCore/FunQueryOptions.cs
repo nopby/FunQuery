@@ -19,6 +19,15 @@ public sealed class FunQueryOptions
     public string SourceParameter { get; set; } = "source";
 
     /// <summary>
+    /// Bila true, adapter memetakan dokumen OpenAPI 3.1 di <see cref="OpenApiRoute"/>.
+    /// Default false; sample host menyalakannya.
+    /// </summary>
+    public bool EnableOpenApi { get; set; }
+
+    /// <summary>Path dokumen OpenAPI, default <c>/openapi/v1.json</c>.</summary>
+    public string OpenApiRoute { get; set; } = "/openapi/v1.json";
+
+    /// <summary>
     /// Ukuran maksimum body <c>POST /query</c> dalam byte. Default 64 KB. Body yang lebih besar
     /// ditolak sebagai <c>REQUEST_TOO_LARGE</c> (413) tanpa membaca seluruhnya.
     /// </summary>
@@ -46,6 +55,21 @@ public sealed class FunQueryOptions
             throw new ArgumentException(
                 $"{nameof(SourceParameter)} must not be empty.",
                 nameof(SourceParameter));
+
+        if (string.IsNullOrWhiteSpace(OpenApiRoute) ||
+            !OpenApiRoute.StartsWith('/'))
+        {
+            throw new ArgumentException(
+                $"{nameof(OpenApiRoute)} must be a non-empty path starting with '/'.",
+                nameof(OpenApiRoute));
+        }
+
+        if (string.Equals(OpenApiRoute, Route, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"{nameof(OpenApiRoute)} must differ from {nameof(Route)}.",
+                nameof(OpenApiRoute));
+        }
 
         if (MaxRequestBodyBytes < 1)
             throw new ArgumentOutOfRangeException(

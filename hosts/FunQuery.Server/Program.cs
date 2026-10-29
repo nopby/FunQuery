@@ -5,7 +5,12 @@ using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddFunQuery();
+builder.Services.AddFunQuery(options =>
+{
+    options.EnableOpenApi = ReadBool(
+        builder.Configuration["OpenApi:Enabled"],
+        defaultValue: true);
+});
 
 var orders = new OrdersSource();
 var people = new PeopleSource();

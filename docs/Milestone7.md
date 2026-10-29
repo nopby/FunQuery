@@ -19,7 +19,7 @@ semantics.
 
 | Stage | Name                                      | Depends on | Size | Status |
 | ----- | ----------------------------------------- | ---------- | ---- | ------ |
-| M7.1  | OpenAPI document                           | M6         | M    | ⏳     |
+| M7.1  | OpenAPI document                           | M6         | M    | ✅     |
 | M7.2  | Interactive API docs UI                    | M7.1       | S    | ⏳     |
 | M7.3  | Playground polish and integration          | M7.1       | S    | ⏳     |
 | M7.4  | Local development environment              | M6         | M    | ⏳     |
@@ -33,7 +33,8 @@ semantics.
 
 ### Work
 
-* Add `Microsoft.AspNetCore.OpenApi` to the adapter or sample host.
+* Add `Microsoft.AspNetCore.OpenApi` to the adapter or sample host, or use a static AOT-safe document
+  if the generator conflicts with Native AOT.
 * Map `GET /openapi/v1.json` (or the configured path) with `AddOpenApi()` / `MapOpenApi()`.
 * Describe:
   * `GET /query`: `q`, `source`, and the dynamic `v.<name>` variables (documented as a convention,
@@ -62,6 +63,17 @@ semantics.
 * A client can generate a request from the document.
 * The document matches the real endpoints and error envelope.
 * The AOT strategy is explicit.
+
+### Result
+
+* The adapter serves a static OpenAPI 3.1 document at `/openapi/v1.json` when `EnableOpenApi` is true
+  (default false; sample hosts enable it). `OpenApiRoute` is configurable.
+* The document describes GET and POST, `QueryRequest`, `QueryErrorResponse`, the 200 result, and the
+  400/408/413/415/422/500 errors. `v.<name>` variables are documented as a convention.
+* The document is built as `JsonNode` with a non-generic array helper, avoiding reflection/trimming
+  annotations; the Native AOT host served it successfully.
+* 6 new tests (1149 -> 1155) cover both methods, schemas, status codes, disabled behavior, custom
+  routes/parameters, and the absence of secrets.
 
 ---
 

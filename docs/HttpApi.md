@@ -216,6 +216,20 @@ builder.Services.AddFunQuery(options =>
 });
 ```
 
+## OpenAPI
+
+When `EnableOpenApi` is true (default false; the sample hosts enable it), the adapter serves an OpenAPI
+3.1 document:
+
+```http
+GET /openapi/v1.json
+```
+
+`OpenApiRoute` changes the path. The document describes `GET`/`POST /query`, the `QueryRequest` and
+`QueryErrorResponse` schemas, the result, and the documented status codes. `v.<name>` variables are
+documented as a convention because OpenAPI has no wildcard query parameter. The document is a static,
+AOT-safe JSON document; it does not depend on reflection-based endpoint metadata.
+
 ## Playground
 
 The sample host serves a developer playground at `/playground/` when `Playground:Enabled` is true (the
