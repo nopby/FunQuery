@@ -39,7 +39,7 @@ in the dialect and the connection factory.
 src/
   FunQuery.Sql/                 shared SQL provider: plan, SQL AST, renderer,
                                 ISqlDialect, generic DbConnection executor
-  FunQuery.PostgreSql/          PostgreSQL dialect + Npgsql source/connection/type mapping
+  FunQuery.PostgreSql/          PostgreSQL dialect (M6.2); Npgsql source/executor (M6.3)
   FunQuery.Linq/                optional LINQ provider (IEnumerable/IQueryable)
 hosts/
   FunQuery.Server/              references AspNetCore and the providers it enables
@@ -97,11 +97,11 @@ It does **not** need a new parser, analyzer, plan builder, or result model.
 
 ### Semantic rules
 
-* **Null:** SQL is three-valued; FunQuery is two-valued. The renderer rewrites:
-  * `x eq null` → `x IS NULL`; `x neq null` → `x IS NOT NULL`;
-  * `x neq @p` → `(x <> @p OR x IS NULL)`;
-  * boolean operands and `not` are wrapped so a null comparison is false, never unknown;
-  * orderings keep SQL's behavior: a null operand is false, which matches FunQuery.
+* **Null:** SQL is three-valued; FunQuery is two-valued. The renderer uses PostgreSQL
+  `IS NOT DISTINCT FROM` for `eq` and `IS DISTINCT FROM` for `neq`, which matches FunQuery exactly
+  (`null eq null` true, `null neq null` false, `null neq 5` true). Orderings keep SQL's behavior: a
+  null operand is false. Boolean operands and `not` are wrapped with `COALESCE(..., FALSE)` so a null
+  comparison is never unknown.
 * **Strings:** comparisons and ordering use `COLLATE "C"` (binary, case-sensitive). `contains`/`startswith`/
   `endswith` render to `POSITION`/`LEFT`/`RIGHT` (or escaped `LIKE`) under the same collation.
 * **Sorting:** `NULLS FIRST` for `asc`, `NULLS LAST` for `desc`, matching "null is the smallest value".

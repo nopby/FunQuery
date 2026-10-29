@@ -48,6 +48,9 @@ public enum QueryErrorCode
     MaxDepthExceeded,
     TooManyTokens,
 
+    // Provider relasional/SQL
+    OrderRequired,
+
     // Integrasi HTTP dan batas eksekusi
     InvalidRequest,
     UnsupportedMediaType,

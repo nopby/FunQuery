@@ -38,6 +38,8 @@ public static class QueryErrorCodeExtensions
         QueryErrorCode.InvalidSortDirection => "INVALID_SORT_DIRECTION",
         QueryErrorCode.InvalidDate => "INVALID_DATE",
 
+        QueryErrorCode.OrderRequired => "ORDER_REQUIRED",
+
         QueryErrorCode.InputTooLong => "INPUT_TOO_LONG",
         QueryErrorCode.MaxDepthExceeded => "MAX_DEPTH_EXCEEDED",
         QueryErrorCode.TooManyTokens => "TOO_MANY_TOKENS",

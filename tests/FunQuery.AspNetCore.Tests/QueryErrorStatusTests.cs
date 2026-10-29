@@ -18,6 +18,7 @@ public class QueryErrorStatusTests
     [InlineData(QueryErrorCode.InvalidRequest, 400)]
     [InlineData(QueryErrorCode.UnknownSource, 400)]
     [InlineData(QueryErrorCode.InvalidParameter, 400)]
+    [InlineData(QueryErrorCode.OrderRequired, 400)]
     [InlineData(QueryErrorCode.TypeMismatch, 400)]
     [InlineData(QueryErrorCode.TooManyTokens, 400)]
     [InlineData(QueryErrorCode.MaxDepthExceeded, 400)]

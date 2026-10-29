@@ -26,7 +26,7 @@ one starts.
 | ----- | ----------------------------------------- | ---------- | ---- | ------ |
 | M6.0a | Query playground                           | —          | S    | ✅     |
 | M6.1  | Provider contract and relational plan      | —          | L    | ✅     |
-| M6.2  | SQL core and PostgreSQL dialect            | M6.1       | L    | ⏳     |
+| M6.2  | SQL core and PostgreSQL dialect            | M6.1       | L    | ✅     |
 | M6.3  | PostgreSQL execution and sources           | M6.2       | L    | ⏳     |
 | M6.4  | Semantic parity and capability enforcement | M6.3       | M    | ⏳     |
 | M6.5  | HTTP integration and hardening             | M6.4       | M    | ⏳     |
@@ -162,6 +162,17 @@ one starts.
 * Every supported v1 function has a golden SQL test.
 * The renderer never concatenates a user value into SQL.
 * PostgreSQL-specific knowledge is confined to `FunQuery.PostgreSql`.
+
+### Result
+
+* `FunQuery.Sql` has the SQL AST, `SqlWriter`, `SqlRenderer`, and `ISqlDialect`.
+* `FunQuery.PostgreSql` has the dialect; it does not reference Npgsql yet.
+* 23 golden tests in `tests/FunQuery.PostgreSql.Tests` cover projection, filtering, sorting,
+  pagination, aggregation, `any`/`first`, distinct, null-safe equality, collation, parameters, and
+  explicit rejection of inline sources, `$index`, JSON projection, non-ASCII casing, and non-BMP
+  `$length`.
+* Equality uses PostgreSQL `IS [NOT] DISTINCT FROM`, which matches FunQuery's two-valued null
+  semantics exactly; `neq` no longer needs a `<> OR IS NULL` rewrite.
 
 ---
 

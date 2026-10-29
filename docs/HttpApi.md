@@ -152,7 +152,7 @@ unhandled error can never leak an exception type or a stack trace.
 | ------ | ----- | ------- |
 | `400` | Lexer, parser, analyzer, and runtime input errors: `UNEXPECTED_TOKEN`, `UNKNOWN_FUNCTION`, `UNKNOWN_IDENTIFIER`, `TYPE_MISMATCH`, `INVALID_ARGUMENT_COUNT`, `INVALID_TARGET`, `DUPLICATE_FIELD`, `NUMBER_OUT_OF_RANGE`, `UNDEFINED_VARIABLE`, `INVALID_DATE`, … | The query is invalid |
 | `400` | `MAX_DEPTH_EXCEEDED`, `TOO_MANY_TOKENS` | The query is too complex |
-| `400` | `INVALID_REQUEST`, `UNKNOWN_SOURCE`, `INVALID_PARAMETER` | The request is malformed |
+| `400` | `INVALID_REQUEST`, `UNKNOWN_SOURCE`, `INVALID_PARAMETER`, `ORDER_REQUIRED` | The request is malformed, or pagination has no explicit `$sort` |
 | `413` | `INPUT_TOO_LONG`, `REQUEST_TOO_LARGE` | The query string or request body is too large |
 | `415` | `UNSUPPORTED_MEDIA_TYPE` | A POST body was sent with a non-JSON content type |
 | `408` | `EXECUTION_TIMEOUT` | The query exceeded its time budget |
