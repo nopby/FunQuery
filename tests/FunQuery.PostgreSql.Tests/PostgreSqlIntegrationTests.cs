@@ -221,6 +221,29 @@ public sealed class PostgreSqlIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TheResultItemLimitIsEnforced()
+    {
+        if (_dataSource is null) return;
+
+        var engine = new QueryEngine(
+            new QueryLimits { MaxResultItems = 2 });
+
+        var environment = EnvironmentWith();
+        var plan = engine.Prepare("$source(@source).$sort(id)", environment);
+
+        await using var source = new PostgreSqlSource(
+            "orders",
+            Schema,
+            TableName,
+            _dataSource);
+
+        var error = await Assert.ThrowsAsync<QueryException>(
+            () => source.ExecuteAsync(plan, environment).AsTask());
+
+        Assert.Equal(QueryErrorCode.ResultTooLarge, error.Code);
+    }
+
+    [Fact]
     public async Task ParityFilterProjectSortPaginationAndAggregates()
     {
         if (_dataSource is null) return;

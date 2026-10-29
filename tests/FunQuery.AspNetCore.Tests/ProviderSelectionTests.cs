@@ -66,6 +66,24 @@ public class ProviderSelectionTests
         Assert.Equal(0, source.LoadCount);
     }
 
+    [Fact]
+    public async Task UnexpectedProviderExceptionsBecomeAGeneric500()
+    {
+        var source = new FakeSource(
+            new FakeExecutor(throwUnexpected: true));
+
+        using var factory = CreateFactory(source);
+
+        var response = await factory.CreateClient().GetAsync(
+            Url("$source(@source).$count()", "fake"));
+
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Contains("INTERNAL_ERROR", body);
+        Assert.DoesNotContain("secret provider detail", body);
+    }
+
     private sealed class FakeSource : IQuerySource
     {
         private readonly IQuerySourceExecutor _executor;
@@ -102,11 +120,16 @@ public class ProviderSelectionTests
     {
         private readonly object? _result;
         private readonly QueryErrorCode? _error;
+        private readonly bool _throwUnexpected;
 
-        public FakeExecutor(object? result = null, QueryErrorCode? error = null)
+        public FakeExecutor(
+            object? result = null,
+            QueryErrorCode? error = null,
+            bool throwUnexpected = false)
         {
             _result = result;
             _error = error;
+            _throwUnexpected = throwUnexpected;
         }
 
         public ValueTask<object?> ExecuteAsync(
@@ -114,6 +137,9 @@ public class ProviderSelectionTests
             QueryEnvironment environment,
             CancellationToken cancellationToken = default)
         {
+            if (_throwUnexpected)
+                throw new InvalidOperationException("secret provider detail");
+
             if (_error is { } code)
                 throw new QueryException(code, "Provider failure.");
 

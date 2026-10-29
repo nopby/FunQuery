@@ -193,6 +193,10 @@ but a query that keeps working is stopped at the next check. A client that disco
 `$first()` are not affected, and an empty array is always allowed. Exceeding the limit is an error, never
 a silent truncation.
 
+For a provider-backed source (PostgreSQL), `MaxResultItems` is enforced while reading rows, and the
+command timeout is the smaller of the source's timeout and `MaxExecutionTime`. `MaxSourceItems` is an
+in-memory loading limit and does not apply to a database source.
+
 Set them at startup:
 
 ```csharp

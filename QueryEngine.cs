@@ -71,7 +71,7 @@ public sealed class QueryEngine
         var context = new SemanticContext(query.AsMemory(), _functions, Limits, types);
         var analyzed = SemanticAnalyzer.Analyze(parsed, context);
 
-        return new QueryPlan(query, analyzed);
+        return new QueryPlan(query, analyzed, Limits);
     }
 
     /// <summary>

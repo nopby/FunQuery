@@ -155,6 +155,9 @@ var source = new PostgreSqlSource(
 * Parameters map to `NpgsqlDbType`: `integer`, `bigint`, `numeric`, `text`, `boolean`, `date`.
 * Object rows are materialized in schema field order; a missing result column reads as null.
 * Command timeout and the request cancellation token are propagated to Npgsql.
+* `MaxResultItems` is enforced while reading rows; the command timeout is the smaller of the source
+  timeout and `QueryLimits.MaxExecutionTime`. `MaxSourceItems` is an in-memory loading limit and is not
+  applied to a database source.
 * The provider is read-only: it only issues the generated `SELECT` and never writes or runs DDL.
 
 The HTTP adapter uses `IQuerySource.Executor` when present; otherwise it keeps the in-memory path.
@@ -168,7 +171,14 @@ Host=127.0.0.1;Port=5433;Username=postgres;Password=postgres;Database=postgres
 ```
 
 The sample `hosts/FunQuery.PostgreSql.Server` reads `PostgreSql:ConnectionString` or
-`FUNQUERY_POSTGRES` and exposes a registered `orders` source.
+`FUNQUERY_POSTGRES` and registers a PostgreSQL `orders` source plus an in-memory `people` source. Both
+are served through the same GET/POST API. Provider `QueryException`s keep the normal `400`/`422`
+mapping; Npgsql connection/command failures become a generic `500` and are logged without SQL text or
+credentials.
+
+The PostgreSQL host is published with Native AOT (`PublishAot`), and Npgsql 10.0.3 worked in the AOT
+smoke test for GET, POST, and the in-memory source. The in-memory host remains independently
+AOT-published.
 
 ## Parity (M6.4)
 

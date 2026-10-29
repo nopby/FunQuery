@@ -140,4 +140,19 @@ public class PostgreSqlRowReaderTests
         Assert.Equal(QueryErrorCode.TypeMismatch, error.Code);
         Assert.Contains("'id'", error.Message);
     }
+
+    [Fact]
+    public async Task TheReaderEnforcesTheResultItemLimit()
+    {
+        using var reader = Orders().CreateDataReader();
+
+        var error = await Assert.ThrowsAsync<QueryException>(
+            () => PostgreSqlRowReader.ReadAsync(
+                reader,
+                new ArrayType(Schema),
+                maxItems: 1,
+                CancellationToken.None));
+
+        Assert.Equal(QueryErrorCode.ResultTooLarge, error.Code);
+    }
 }

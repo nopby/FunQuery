@@ -29,7 +29,7 @@ one starts.
 | M6.2  | SQL core and PostgreSQL dialect            | M6.1       | L    | ✅     |
 | M6.3  | PostgreSQL execution and sources           | M6.2       | L    | ✅     |
 | M6.4  | Semantic parity and capability enforcement | M6.3       | M    | ✅     |
-| M6.5  | HTTP integration and hardening             | M6.4       | M    | ⏳     |
+| M6.5  | HTTP integration and hardening             | M6.4       | M    | ✅     |
 | M6.6  | Documentation and close-out                | M6.1–M6.5  | S    | ⏳     |
 
 ---
@@ -299,6 +299,22 @@ one starts.
 
 * The sample host can serve both in-memory and PostgreSQL sources.
 * The security checklist from M5 still holds.
+
+### Result
+
+* `hosts/FunQuery.PostgreSql.Server` registers a PostgreSQL `orders` source and an in-memory `people`
+  source; GET and POST work for both.
+* SQL result size is enforced from `QueryPlan.Limits.MaxResultItems` while reading rows. The command
+  timeout is the smaller of the source timeout and `QueryLimits.MaxExecutionTime`; cancellation is
+  propagated.
+* Provider `QueryException`s keep the HTTP mapping (`400`/`422`); Npgsql failures become a generic
+  `500 INTERNAL_ERROR` and are logged without SQL text or credentials.
+* The HTTP test suite covers GET/POST, in-memory and PostgreSQL sources in one host, unknown fields,
+  `ORDER_REQUIRED`, and 12 concurrent requests with different variables.
+* Native AOT publish of the PostgreSQL host succeeded. The AOT binary served GET, POST, and the
+  in-memory source against PostgreSQL 18.
+* `tests/FunQuery.PostgreSql.Tests` has 52 tests (28 golden SQL, 4 binder, 5 reader, 10 integration/
+  parity, 5 HTTP); the full suite is 1149 tests.
 
 ---
 

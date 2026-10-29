@@ -90,7 +90,11 @@ public sealed class PostgreSqlSource : IQuerySourceExecutor, IAsyncDisposable
             .Render(relational, environment);
 
         await using var command = _dataSource.CreateCommand(statement.Sql);
-        command.CommandTimeout = _commandTimeoutSeconds;
+        command.CommandTimeout = Math.Min(
+            _commandTimeoutSeconds,
+            Math.Max(
+                1,
+                (int)Math.Ceiling(plan.Limits.MaxExecutionTime.TotalSeconds)));
 
         foreach (var parameter in statement.Parameters)
             command.Parameters.Add(PostgreSqlParameterBinder.Create(parameter));
@@ -105,6 +109,7 @@ public sealed class PostgreSqlSource : IQuerySourceExecutor, IAsyncDisposable
         return await PostgreSqlRowReader.ReadAsync(
             reader,
             resultType,
+            plan.Limits.MaxResultItems,
             cancellationToken);
     }
 

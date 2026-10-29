@@ -1,5 +1,6 @@
 using FunQuery.AspNetCore;
 using FunQuery.PostgreSql;
+using FunQuery.PostgreSql.Server.Sources;
 using FunQuery.SemanticTypes;
 using Npgsql;
 
@@ -30,8 +31,9 @@ var ordersSchema = new ObjectType(
         ["ordered_on"] = SemanticTypeOptions.Date,
     });
 
-builder.Services.AddFunQuerySources(sources => sources.Add(
-    new PostgreSqlSource("orders", ordersSchema, "orders", dataSource)
+builder.Services.AddFunQuerySources(sources => sources
+    .Add(new PeopleSource())
+    .Add(new PostgreSqlSource("orders", ordersSchema, "orders", dataSource)
         .AsQuerySource("orders", ordersSchema)));
 
 var app = builder.Build();

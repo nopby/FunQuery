@@ -209,9 +209,10 @@ dotnet publish hosts/FunQuery.Server -c Release -r win-x64
 
 Run the published binary from its output directory so `wwwroot` and `appsettings.json` are found.
 
-### PostgreSQL host (M6.3)
+### PostgreSQL host (M6.3–M6.5)
 
-The SQL host executes registered PostgreSQL sources through the same GET/POST API:
+The SQL host executes registered PostgreSQL sources through the same GET/POST API, alongside an
+in-memory source:
 
 ```bash
 FUNQUERY_POSTGRES="Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=postgres" \
@@ -220,10 +221,17 @@ FUNQUERY_POSTGRES="Host=localhost;Port=5432;Username=postgres;Password=postgres;
 
 ```bash
 curl "http://localhost:5000/query?source=orders&q=%24source(%40source).%24filter(total%20gt%20100).%24select(id%2C%20customer)"
+curl "http://localhost:5000/query?source=people&q=%24source(%40source).%24filter(active).%24count()"
 ```
 
 The sample expects an `orders` table with `id integer`, `customer text`, `total numeric`, and
-`ordered_on date`. M6.3–M6.4 are implemented; M6.5 adds provider hardening and the AOT assessment.
+`ordered_on date`; `people` is in-memory. The host is also published with Native AOT:
+
+```bash
+dotnet publish hosts/FunQuery.PostgreSql.Server -c Release -r win-x64
+```
+
+M6.3–M6.5 are implemented; M6.6 remains the documentation and close-out pass.
 
 See [`docs/Milestone6.md`](docs/Milestone6.md) for the staged plan,
 [`docs/HttpApi.md`](docs/HttpApi.md) for the GET/POST endpoints, variables, limits, security, and error

@@ -12,9 +12,16 @@ namespace FunQuery.PostgreSql;
 /// </summary>
 internal static class PostgreSqlRowReader
 {
+    public static Task<object?> ReadAsync(
+        DbDataReader reader,
+        SemanticType resultType,
+        CancellationToken cancellationToken) =>
+        ReadAsync(reader, resultType, int.MaxValue, cancellationToken);
+
     public static async Task<object?> ReadAsync(
         DbDataReader reader,
         SemanticType resultType,
+        int maxItems,
         CancellationToken cancellationToken)
     {
         if (resultType is ArrayType arrayType)
@@ -22,7 +29,16 @@ internal static class PostgreSqlRowReader
             var rows = new List<object?>();
 
             while (await reader.ReadAsync(cancellationToken))
+            {
                 rows.Add(ReadRow(reader, arrayType.Type));
+
+                if (rows.Count > maxItems)
+                {
+                    throw new QueryException(
+                        QueryErrorCode.ResultTooLarge,
+                        $"The query returned more than {maxItems} items.");
+                }
+            }
 
             return rows;
         }

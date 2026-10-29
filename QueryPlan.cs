@@ -9,14 +9,21 @@ namespace FunQuery;
 /// </summary>
 public sealed class QueryPlan
 {
-    internal QueryPlan(string query, BaseExpression expression)
+    internal QueryPlan(
+        string query,
+        BaseExpression expression,
+        QueryLimits limits)
     {
         Query = query;
         Expression = expression;
+        Limits = limits;
     }
 
     /// <summary>Teks query asli. Posisi token di AST merujuk ke teks ini.</summary>
     public string Query { get; }
 
     public BaseExpression Expression { get; }
+
+    /// <summary>Batas yang dipakai saat query dianalisis; executor provider memakainya juga.</summary>
+    public QueryLimits Limits { get; }
 }
