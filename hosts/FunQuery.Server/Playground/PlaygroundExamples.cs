@@ -18,13 +18,20 @@ internal static class PlaygroundExamples
             null),
 
         new(
-            "Orders: total over 100",
+            "Variables: inline filter",
+            "$source([{id: 1}, {id: 2}, {id: 3}])" +
+            ".$filter(id gt @min).$select(id)",
+            null,
+            "{\"min\": 1}"),
+
+        new(
+            "PostgreSQL: orders over 100",
             "$source(@source).$filter(total gt 100).$select(id, customer, total)",
             "orders",
             null),
 
         new(
-            "Orders: variable",
+            "PostgreSQL: orders with variable",
             "$source(@source).$filter(total gt @min).$select(id, customer, total)",
             "orders",
             "{\"min\": 100}"),

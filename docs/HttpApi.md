@@ -269,9 +269,14 @@ The sample host serves a developer playground at `/playground/` when `Playground
 sample `appsettings.json` enables it). It is a static page that calls `POST /query`:
 
 * query editor, source input with a datalist, variables JSON editor;
+* effective `POST /query` URL and JSON body preview, updated as you edit;
+* `Copy as curl` (POSIX shell) and `Copy POST body` actions;
 * examples and history in `localStorage`;
 * `Ctrl`+`Enter` to run;
 * pretty JSON results and the structured error envelope.
+
+Examples include an inline variables example and PostgreSQL-oriented `orders` examples. Source-based
+examples are omitted when `Playground:ExposeSourceNames` is false.
 
 `GET /playground/config` returns the examples and source names. Source names are only included when
 `Playground:ExposeSourceNames` is true; otherwise the list is empty and source-based examples are

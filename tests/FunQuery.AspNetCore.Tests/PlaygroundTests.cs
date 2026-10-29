@@ -34,6 +34,9 @@ public class PlaygroundTests
         Assert.Contains("FunQuery Playground", html);
         Assert.Contains("/playground/playground.js", html);
         Assert.Contains("href=\"/docs\"", html);
+        Assert.Contains("id=\"copy-curl\"", html);
+        Assert.Contains("id=\"copy-body\"", html);
+        Assert.Contains("id=\"request-body\"", html);
         Assert.DoesNotContain("http://", html);
         Assert.DoesNotContain("https://", html);
     }
@@ -66,7 +69,11 @@ public class PlaygroundTests
         Assert.Contains(
             "javascript",
             script.Content.Headers.ContentType?.MediaType ?? string.Empty);
-        Assert.Contains("fetch(\"/query\"", await script.Content.ReadAsStringAsync());
+        var scriptBody = await script.Content.ReadAsStringAsync();
+        Assert.Contains("fetch(\"/query\"", scriptBody);
+        Assert.Contains("navigator.clipboard", scriptBody);
+        Assert.Contains("curl -X POST", scriptBody);
+        Assert.Contains("request-body", scriptBody);
 
         Assert.Equal(HttpStatusCode.OK, style.StatusCode);
         Assert.Equal("text/css", style.Content.Headers.ContentType?.MediaType);
@@ -86,6 +93,8 @@ public class PlaygroundTests
         Assert.Contains("\"orders\"", json);
         Assert.Contains("\"people\"", json);
         Assert.Contains("Inline: count", json);
+        Assert.Contains("Variables: inline filter", json);
+        Assert.Contains("PostgreSQL: orders over 100", json);
     }
 
     [Fact]

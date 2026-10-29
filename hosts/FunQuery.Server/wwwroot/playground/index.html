@@ -50,8 +50,22 @@
       </div>
     </section>
 
-    <section class="panel output" aria-label="Response">
+    <section class="panel output" aria-label="Request and response">
       <div class="output-head">
+        <span>Request</span>
+        <div class="output-actions">
+          <button id="copy-curl" type="button" class="small"
+                  title="Copy a POSIX shell curl command">Copy as curl</button>
+          <button id="copy-body" type="button" class="small">Copy POST body</button>
+        </div>
+      </div>
+      <div class="request-line">
+        <span class="method">POST</span>
+        <code id="request-url">/query</code>
+      </div>
+      <pre id="request-body" class="request-body" aria-label="Request body"></pre>
+
+      <div class="output-head response-head">
         <span>Response</span>
         <span class="hint">JSON</span>
       </div>

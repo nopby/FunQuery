@@ -43,6 +43,7 @@
       source: $("source").value,
       variables: $("variables").value,
     });
+    updateRequestPreview();
   }
 
   function restore() {
@@ -126,6 +127,116 @@
     addHistoryOptions();
   }
 
+  function queryUrl() {
+    return new URL("/query", window.location.href).href;
+  }
+
+  function buildRequest() {
+    const query = $("query").value.trim();
+    if (!query) {
+      return { error: "Enter a query first." };
+    }
+
+    const body = { query };
+    const source = $("source").value.trim();
+    if (source) body.source = source;
+
+    const variablesText = $("variables").value.trim();
+    if (variablesText) {
+      let variables;
+      try {
+        variables = JSON.parse(variablesText);
+      } catch {
+        return { error: "Variables must be valid JSON." };
+      }
+
+      if (!variables || typeof variables !== "object" || Array.isArray(variables)) {
+        return { error: "Variables must be a JSON object." };
+      }
+
+      body.variables = variables;
+    }
+
+    return { body };
+  }
+
+  function updateRequestPreview(request = buildRequest()) {
+    $("request-url").textContent = queryUrl();
+
+    const body = $("request-body");
+    if (request.error) {
+      body.textContent = request.error;
+      body.classList.add("invalid");
+      return;
+    }
+
+    body.classList.remove("invalid");
+    body.textContent = JSON.stringify(request.body, null, 2);
+  }
+
+  function shellQuote(value) {
+    return "'" + value.replace(/'/g, "'\\''") + "'";
+  }
+
+  function curlCommand(request) {
+    const body = JSON.stringify(request.body);
+    return [
+      "curl -X POST " + shellQuote(queryUrl()),
+      "  -H 'Content-Type: application/json'",
+      "  -d " + shellQuote(body),
+    ].join(" \\\n");
+  }
+
+  function fallbackCopy(text) {
+    const area = document.createElement("textarea");
+    area.className = "clipboard-fallback";
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.setAttribute("aria-hidden", "true");
+    document.body.append(area);
+    area.select();
+
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } catch {
+      copied = false;
+    }
+
+    area.remove();
+    return copied;
+  }
+
+  async function copyText(text, label) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        setStatus(label + " copied");
+        return;
+      }
+    } catch {
+      // Fall through to the textarea fallback.
+    }
+
+    setStatus(fallbackCopy(text) ? label + " copied" : "Copy failed");
+  }
+
+  function copyCurrent(kind) {
+    const request = buildRequest();
+    if (request.error) {
+      updateRequestPreview(request);
+      showError({ code: "INVALID_REQUEST", message: request.error });
+      return;
+    }
+
+    updateRequestPreview(request);
+    const text = kind === "curl"
+      ? curlCommand(request)
+      : JSON.stringify(request.body, null, 2);
+
+    copyText(text, kind === "curl" ? "curl" : "POST body");
+  }
+
   function showResult(payload) {
     const output = $("result");
     output.classList.remove("error");
@@ -158,34 +269,14 @@
   }
 
   async function run() {
-    const query = $("query").value.trim();
-    if (!query) {
-      showError({ code: "INVALID_REQUEST", message: "Enter a query first." });
+    const request = buildRequest();
+    if (request.error) {
+      updateRequestPreview(request);
+      showError({ code: "INVALID_REQUEST", message: request.error });
       return;
     }
 
-    const variablesText = $("variables").value.trim();
-    let variables;
-
-    if (variablesText) {
-      try {
-        variables = JSON.parse(variablesText);
-      } catch {
-        showError({ code: "INVALID_REQUEST", message: "Variables must be valid JSON." });
-        return;
-      }
-
-      if (!variables || typeof variables !== "object" || Array.isArray(variables)) {
-        showError({ code: "INVALID_REQUEST", message: "Variables must be a JSON object." });
-        return;
-      }
-    }
-
-    const body = { query };
-    const source = $("source").value.trim();
-    if (source) body.source = source;
-    if (variables) body.variables = variables;
-
+    updateRequestPreview(request);
     setStatus("Running…");
     const started = performance.now();
 
@@ -193,7 +284,7 @@
       const response = await fetch("/query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(request.body),
       });
 
       const text = await response.text();
@@ -209,7 +300,7 @@
 
       if (response.ok) {
         showResult(payload);
-        remember(body);
+        remember(request.body);
       } else {
         showError(payload);
       }
@@ -246,6 +337,9 @@
       setStatus("");
     });
 
+    $("copy-curl").addEventListener("click", () => copyCurrent("curl"));
+    $("copy-body").addEventListener("click", () => copyCurrent("body"));
+
     $("query").addEventListener("input", persist);
     $("source").addEventListener("input", persist);
     $("variables").addEventListener("input", persist);
@@ -277,6 +371,8 @@
       if (config.examples.length > 0) applyExample(0);
       else $("query").value = "$source([1, 2, 3]).$count()";
     }
+
+    updateRequestPreview();
   }
 
   init();

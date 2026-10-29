@@ -21,7 +21,7 @@ semantics.
 | ----- | ----------------------------------------- | ---------- | ---- | ------ |
 | M7.1  | OpenAPI document                           | M6         | M    | ✅     |
 | M7.2  | Interactive API docs UI                    | M7.1       | S    | ✅     |
-| M7.3  | Playground polish and integration          | M7.1       | S    | ⏳     |
+| M7.3  | Playground polish and integration          | M7.1       | S    | ✅     |
 | M7.4  | Local development environment              | M6         | M    | ⏳     |
 | M7.5  | Documentation and close-out                | M7.1–M7.4  | S    | ⏳     |
 
@@ -143,6 +143,19 @@ semantics.
 
 * A developer can copy a working `curl` command from the playground.
 * The playground links to the generated API docs.
+
+### Result
+
+* The playground shows the effective `POST /query` URL and pretty-printed JSON body above the response;
+  both update as the query, source, or variables change.
+* `Copy as curl` emits a POSIX-shell command with safe single-quote escaping; `Copy POST body` emits the
+  pretty JSON. Both use the Clipboard API with a hidden-textarea fallback.
+* Examples now include `Variables: inline filter` and explicit
+  `PostgreSQL: orders over 100` / `PostgreSQL: orders with variable` entries. Source-based examples
+  remain filtered when `ExposeSourceNames` is false.
+* Error-position selection and history are preserved. Playground tests assert the copy controls, request
+  preview hooks, and new examples; the manual smoke test ran a query, copied both forms, and checked the
+  error selection.
 
 ---
 

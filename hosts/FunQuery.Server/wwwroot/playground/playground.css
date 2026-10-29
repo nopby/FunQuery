@@ -154,8 +154,65 @@ button.primary:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
   color: var(--muted);
   font-size: 0.8rem;
+}
+
+.output-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+button.small {
+  padding: 0.25rem 0.45rem;
+  font-size: 0.72rem;
+}
+
+.request-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.method {
+  flex: 0 0 auto;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+#request-url {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.request-body {
+  flex: 0 1 auto;
+  max-height: 9rem;
+  min-height: 0;
+}
+
+.request-body.invalid {
+  color: var(--error);
+}
+
+.response-head {
+  margin-top: 0.15rem;
+}
+
+#result {
+  flex: 1;
+  min-height: 8rem;
 }
 
 pre {
@@ -171,6 +228,16 @@ pre {
   border: 1px solid var(--border);
   border-radius: 7px;
   padding: 0.75rem;
+}
+
+.clipboard-fallback {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 pre.error {
@@ -220,7 +287,7 @@ code {
     height: auto;
   }
 
-  pre {
+  #result {
     min-height: 12rem;
   }
 }
