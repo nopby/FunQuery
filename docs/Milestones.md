@@ -408,6 +408,8 @@ Every function must have a documented contract containing:
 
 **Goal:** expose FunQuery safely through HTTP.
 
+The staged work plan for this milestone is in [`Milestone5.md`](Milestone5.md).
+
 ## GET
 
 Provide an endpoint such as:
