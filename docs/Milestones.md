@@ -575,7 +575,8 @@ Provider-specific limitations must be explicit through the capability model.
 **Goal:** make FunQuery easy to discover, try, and integrate without changing the language or the HTTP
 contract.
 
-The staged work plan for this milestone is in [`Milestone7.md`](Milestone7.md).
+The staged work plan for this milestone is in [`Milestone7.md`](Milestone7.md). The local PostgreSQL
+setup and seed guide is in [`Development.md`](Development.md).
 
 ## Scope
 

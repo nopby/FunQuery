@@ -220,9 +220,12 @@ The SQL host executes registered PostgreSQL sources through the same GET/POST AP
 in-memory source:
 
 ```bash
-FUNQUERY_POSTGRES="Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=postgres" \
+FUNQUERY_POSTGRES="Host=127.0.0.1;Port=5433;Username=postgres;Password=postgres;Database=postgres" \
   dotnet run --project hosts/FunQuery.PostgreSql.Server
 ```
+
+For a local database and seed, use `scripts/dev-postgres.ps1` / `.sh` and `db/seed.sql`; see
+[`Development.md`](docs/Development.md).
 
 ```bash
 curl "http://localhost:5000/query?source=orders&q=%24source(%40source).%24filter(total%20gt%20100).%24select(id%2C%20customer)"
@@ -242,4 +245,5 @@ limitations matrix.
 
 See [`docs/Milestone6.md`](docs/Milestone6.md) for the staged plan,
 [`docs/HttpApi.md`](docs/HttpApi.md) for the GET/POST endpoints, variables, limits, security, and error
-contract, and [`docs/Sources.md`](docs/Sources.md) for source registration and schema.
+contract, [`docs/Development.md`](docs/Development.md) for local PostgreSQL setup, and
+[`docs/Sources.md`](docs/Sources.md) for source registration and schema.

@@ -22,7 +22,7 @@ semantics.
 | M7.1  | OpenAPI document                           | M6         | M    | ✅     |
 | M7.2  | Interactive API docs UI                    | M7.1       | S    | ✅     |
 | M7.3  | Playground polish and integration          | M7.1       | S    | ✅     |
-| M7.4  | Local development environment              | M6         | M    | ⏳     |
+| M7.4  | Local development environment              | M6         | M    | ✅     |
 | M7.5  | Documentation and close-out                | M7.1–M7.4  | S    | ⏳     |
 
 ---
@@ -185,6 +185,21 @@ semantics.
 
 * A new contributor can run the playground and the PostgreSQL host from the guide.
 * No database setup step is hidden or implicit.
+
+### Result
+
+* `deploy/compose.yaml` runs `postgres:18.3` on `127.0.0.1:5433`, with a named volume
+  (`funquery-postgres-data`), a `pg_isready` healthcheck, and the seed mounted as an init script.
+* `db/seed.sql` is idempotent (`DROP TABLE IF EXISTS`, `CREATE`, five `orders` rows) and matches the
+  host schema. A fresh volume is seeded automatically; `seed` refreshes an existing volume.
+* `scripts/dev-postgres.ps1` and `.sh` support `start`, `stop`, `reset`, `seed`, and `status`, detect
+  `podman-compose` / `docker-compose` / `podman compose` / `docker compose`, wait for readiness, and
+  print the connection string.
+* `.env.example` contains the `FUNQUERY_POSTGRES` template; `docs/Development.md` covers prerequisites,
+  startup, seeding, both hosts, tests, cleanup, and troubleshooting.
+* Verified with Podman 6.1.4 and podman-compose 1.6.0: fresh start auto-seeded, `seed` twice stayed at
+  five rows, `reset` recreated and seeded the volume, `stop` kept the volume, and the PostgreSQL host
+  served both `orders` and in-memory `people`. The full suite remains 1161 tests.
 
 ---
 

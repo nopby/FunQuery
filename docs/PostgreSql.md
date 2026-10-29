@@ -56,11 +56,12 @@ $source(@source).$filter(total gt 100).$select(id, customer)
 The sample host is `hosts/FunQuery.PostgreSql.Server`:
 
 ```bash
-FUNQUERY_POSTGRES="Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=postgres" \
+FUNQUERY_POSTGRES="Host=127.0.0.1;Port=5433;Username=postgres;Password=postgres;Database=postgres" \
   dotnet run --project hosts/FunQuery.PostgreSql.Server
 ```
 
-It registers a PostgreSQL `orders` source and an in-memory `people` source.
+The sample registers a PostgreSQL `orders` source and an in-memory `people` source. For a local database
+and seed, see [`Development.md`](Development.md).
 
 ## Schema mapping
 
@@ -165,6 +166,8 @@ Live tests use:
 ```text
 FUNQUERY_POSTGRES=Host=127.0.0.1;Port=5433;Username=postgres;Password=postgres;Database=postgres
 ```
+
+For the local compose setup and seed, see [`Development.md`](Development.md).
 
 Without it, live tests return early; golden SQL and unit tests still run.
 

@@ -1,0 +1,30 @@
+# Local PostgreSQL for FunQuery development.
+# Podman:  podman compose -f deploy/compose.yaml up -d
+# Docker:  docker compose -f deploy/compose.yaml up -d
+#
+# PostgreSQL 18 keeps PGDATA under /var/lib/postgresql/<major>/docker, so the
+# named volume is mounted at /var/lib/postgresql (not /var/lib/postgresql/data).
+services:
+  postgres:
+    image: postgres:18.3
+    container_name: funquery-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - funquery-postgres-data:/var/lib/postgresql
+      - ../db/seed.sql:/docker-entrypoint-initdb.d/01-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+
+volumes:
+  funquery-postgres-data:
+    name: funquery-postgres-data
