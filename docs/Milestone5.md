@@ -1,6 +1,6 @@
 # Milestone 5 — ASP.NET Core Integration: Work Plan
 
-This document expands [Milestone 5](Milestones.md#milestone-5--aspnet-core-integration) into
+This document expands [Milestone 5](Milestones.md#milestone-5-aspnet-core-integration) into
 independently shippable stages. Every stage must leave the solution building without warnings, with its
 tests passing, before the next one starts.
 
@@ -370,7 +370,7 @@ This is the largest stage: it adds the only new core API in M5 and the security 
 
 ### Definition of Done
 
-* All Milestone 5 DoD items in [Milestones.md](Milestones.md#milestone-5--aspnet-core-integration) are
+* All Milestone 5 DoD items in [Milestones.md](Milestones.md#milestone-5-aspnet-core-integration) are
   satisfied by code, tests, and docs.
 * `dotnet test` is green, including the new integration test project.
 * The published AOT binary serves GET and POST.

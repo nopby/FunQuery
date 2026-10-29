@@ -1,6 +1,6 @@
 # Milestone 6 — Providers: Work Plan (PostgreSQL first)
 
-This document expands [Milestone 6](Milestones.md#milestone-6--providers) into stages. The architecture
+This document expands [Milestone 6](Milestones.md#milestone-6-providers) into stages. The architecture
 decision is recorded in [`Providers.md`](Providers.md): one shared SQL provider, a small dialect per
 database, and PostgreSQL as the first dialect.
 
@@ -332,7 +332,7 @@ one starts.
 
 ### Definition of Done
 
-* All Milestone 6 DoD items in [Milestones.md](Milestones.md#milestone-6--providers) are satisfied for
+* All Milestone 6 DoD items in [Milestones.md](Milestones.md#milestone-6-providers) are satisfied for
   PostgreSQL.
 * The supported subset is documented and covered by parity tests.
 * A user can register a PostgreSQL source and query it from the HTTP host.

@@ -164,3 +164,6 @@ The five rows match the in-memory `orders` sample.
 
 PostgreSQL 18 changed the image data path: `PGDATA` is version-specific and the compose volume is mounted
 at `/var/lib/postgresql`, not `/var/lib/postgresql/data`. Keep that mount if you change the image version.
+
+For serving the generated documentation on a private Tailscale network, see
+[`SelfHosting.md`](SelfHosting.md).

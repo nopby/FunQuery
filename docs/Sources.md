@@ -2,7 +2,7 @@
 
 A **source** is a data set that a query may read through `$source(@source)`. Only sources registered
 at startup can be reached; there is no way to name an arbitrary application object or table. This is
-the security boundary described in [Milestone 5](Milestones.md#milestone-5--aspnet-core-integration).
+the security boundary described in [Milestone 5](Milestones.md#milestone-5-aspnet-core-integration).
 
 ## Registering a source
 

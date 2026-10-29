@@ -247,5 +247,6 @@ limitations matrix.
 See [`docs/Milestone6.md`](docs/Milestone6.md) for the staged plan,
 [`docs/HttpApi.md`](docs/HttpApi.md) for the GET/POST endpoints, variables, limits, security, and error
 contract, [`docs/OpenApi.md`](docs/OpenApi.md) for the OpenAPI document and docs UI,
-[`docs/Development.md`](docs/Development.md) for local PostgreSQL setup, and
+[`docs/Development.md`](docs/Development.md) for local PostgreSQL setup,
+[`docs/SelfHosting.md`](docs/SelfHosting.md) for Tailscale self-hosting, and
 [`docs/Sources.md`](docs/Sources.md) for source registration and schema.

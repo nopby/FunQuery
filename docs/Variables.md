@@ -114,7 +114,7 @@ $let(@items, [{id: 1}, {id: 2}])
 * An undefined variable is `UNDEFINED_VARIABLE`, not `TYPE_MISMATCH` — the two are reported separately so
   that "the variable doesn't exist" and "the variable is the wrong type" are never confused.
 * Variables from outside the query text (bound by the HTTP layer from query parameters, `&@min=18`) are out
-  of scope for this document — see [Milestone 5](Milestones.md#milestone-5--aspnet-core-integration). This
+  of scope for this document — see [Milestone 5](Milestones.md#milestone-5-aspnet-core-integration). This
   document covers only variables declared with `$let` inside the query itself. `QueryEngine` may grow an
   overload to accept externally supplied variables once that milestone defines how their literal text is
   parsed and validated.

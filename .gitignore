@@ -486,3 +486,7 @@ graphify-out/
 
 # SDK-generated launch settings (random ports)
 hosts/**/Properties/launchSettings.json
+
+# MkDocs build output and local docs virtualenv
+site/
+.venv-docs/
