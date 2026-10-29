@@ -1,4 +1,6 @@
-﻿namespace FunQuery;
+﻿using FunQuery.Execution;
+
+namespace FunQuery;
 
 internal static class StringLiteral
 {
@@ -7,5 +9,5 @@ internal static class StringLiteral
     /// lalu ubah setiap '' di dalamnya menjadi satu tanda kutip.
     /// </summary>
     public static string Unquote(ReadOnlySpan<char> tokenText) =>
-        tokenText[1..^1].ToString().Replace("''", "'");
+        LiteralValues.Unquote(tokenText);
 }

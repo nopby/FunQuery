@@ -12,6 +12,8 @@ This document records the provider architecture decision for Milestone 6.
 * **Direct SQL, not LINQ → SQL.** The SQL provider renders a provider-neutral relational plan to
   parameterized SQL. EF Core/LINQ is not used as the SQL translator.
 * **LINQ is a separate provider**, for `IEnumerable`/`IQueryable` composition. It is not the path to SQL.
+* **The plan IR is implemented** in `src/FunQuery.Sql` (M6.1): `PlanBuilder`, `PlanValidator`,
+  `PlanSource`, `ProviderCapabilities`, and `IQueryExecutor`.
 
 ## Layers
 

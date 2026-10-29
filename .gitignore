@@ -483,3 +483,6 @@ $RECYCLE.BIN/
 
 # graphify knowledge graph output
 graphify-out/
+
+# SDK-generated launch settings (random ports)
+hosts/**/Properties/launchSettings.json

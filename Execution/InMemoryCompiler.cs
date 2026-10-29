@@ -1,5 +1,4 @@
-﻿using System.Globalization;
-using FunQuery.Enums;
+﻿using FunQuery.Enums;
 using FunQuery.Expressions;
 using FunQuery.SemanticTypes;
 
@@ -167,53 +166,9 @@ public sealed class InMemoryCompiler
 
     private Func<object?, object?> CompileValue(ValueExpression expression)
     {
-        object? constant;
-
-        switch (expression.Token.Type)
-        {
-            case TokenType.StringLiteral:
-                constant = StringLiteral.Unquote(
-                    _source.Span[expression.Token.StartPosition..expression.Token.EndPosition]);
-                break;
-
-            case TokenType.BooleanLiteral:
-                constant = TextOf(expression.Token) == "true" ? True : False;
-                break;
-
-            case TokenType.NullLiteral:
-                constant = null;
-                break;
-
-            case TokenType.Number:
-                constant = ParseNumber(expression);
-                break;
-
-            default:
-                throw new QueryException(
-                    QueryErrorCode.InternalError,
-                    $"Unsupported literal type: {expression.Token.Type}.",
-                    expression.Span);
-        }
+        var constant = LiteralValues.Parse(expression, _source);
 
         return _ => constant;
-    }
-
-    private object ParseNumber(ValueExpression expression)
-    {
-        var text = TextOf(expression.Token);
-
-        // Setiap arm di-box ke object. Tanpa itu compiler memilih decimal sebagai tipe bersama
-        // dan int atau long diam-diam berubah menjadi decimal.
-        return expression.SemanticType switch
-        {
-            IntType => (object)int.Parse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture),
-            LongType => (object)long.Parse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture),
-            DecimalType => (object)decimal.Parse(text, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture),
-            _ => throw new QueryException(
-                QueryErrorCode.InternalError,
-                "Number literal has no numeric semantic type. Was the query analyzed?",
-                expression.Span),
-        };
     }
 
     // Variable dibaca dari _variables saat delegate dipanggil, bukan saat dikompilasi:

@@ -4,9 +4,11 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/FunQuery.AspNetCore/FunQuery.AspNetCore.csproj" />
+    <Project Path="src/FunQuery.Sql/FunQuery.Sql.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/FunQuery.AspNetCore.Tests/FunQuery.AspNetCore.Tests.csproj" />
+    <Project Path="tests/FunQuery.Sql.Tests/FunQuery.Sql.Tests.csproj" />
     <Project Path="tests/FunQuery.Tests/FunQuery.Tests.csproj" />
   </Folder>
   <Project Path="FunQuery.csproj" />

@@ -18,5 +18,5 @@ public sealed class QueryPlan
     /// <summary>Teks query asli. Posisi token di AST merujuk ke teks ini.</summary>
     public string Query { get; }
 
-    internal BaseExpression Expression { get; }
+    public BaseExpression Expression { get; }
 }

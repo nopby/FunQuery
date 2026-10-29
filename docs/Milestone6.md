@@ -25,7 +25,7 @@ one starts.
 | Stage | Name                                      | Depends on | Size | Status |
 | ----- | ----------------------------------------- | ---------- | ---- | ------ |
 | M6.0a | Query playground                           | —          | S    | ✅     |
-| M6.1  | Provider contract and relational plan      | —          | L    | ⏳     |
+| M6.1  | Provider contract and relational plan      | —          | L    | ✅     |
 | M6.2  | SQL core and PostgreSQL dialect            | M6.1       | L    | ⏳     |
 | M6.3  | PostgreSQL execution and sources           | M6.2       | L    | ⏳     |
 | M6.4  | Semantic parity and capability enforcement | M6.3       | M    | ⏳     |
@@ -110,6 +110,15 @@ one starts.
 * The plan can be built for every v1 function and scalar expression.
 * No PostgreSQL/Npgsql dependency in `FunQuery.Sql`.
 * The plan is deterministic and testable without a database.
+
+### Result
+
+* `src/FunQuery.Sql` contains the plan IR, `PlanBuilder`, `PlanValidator`, `PlanSource`,
+  `ProviderCapabilities`, and `IQueryExecutor`.
+* `tests/FunQuery.Sql.Tests` covers plan shapes and capability rejection (29 tests); no driver package
+  is referenced.
+* Literal parsing moved to the shared `LiteralValues` helper, used by both the in-memory compiler and
+  the plan builder, so the two cannot drift.
 
 ---
 
