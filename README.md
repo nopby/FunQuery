@@ -103,8 +103,10 @@ The roadmap is divided into vertical milestones. Each milestone has a concrete d
 | 4         | Function set v1          | ✅     |
 | 5         | ASP.NET Core integration | ✅     |
 | 6         | Providers (PostgreSQL)   | ✅     |
+| 7         | Developer experience     | ⏳     |
 
-See [`docs/Milestones.md`](docs/Milestones.md) for the detailed roadmap.
+See [`docs/Milestones.md`](docs/Milestones.md) for the detailed roadmap. Milestone 7 is planned; see
+[`docs/Milestone7.md`](docs/Milestone7.md).
 
 ## Language Direction
 

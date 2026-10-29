@@ -570,6 +570,31 @@ Provider-specific limitations must be explicit through the capability model.
 
 ---
 
+# Milestone 7 — Developer Experience
+
+**Goal:** make FunQuery easy to discover, try, and integrate without changing the language or the HTTP
+contract.
+
+The staged work plan for this milestone is in [`Milestone7.md`](Milestone7.md).
+
+## Scope
+
+* OpenAPI document for the GET/POST endpoints.
+* Interactive API documentation UI (Scalar or Swagger UI), development-only by default.
+* Playground polish and links to the API docs.
+* Local development environment: PostgreSQL via Podman/Docker, seed data, and a start/stop guide.
+* Documentation close-out.
+
+## Definition of Done
+
+* `GET /openapi/v1.json` describes both endpoints, request bodies, results, and the error envelope.
+* A docs UI is available in development and absent when disabled.
+* The playground links to the docs and can copy a working `curl` command.
+* A new contributor can start PostgreSQL and both hosts from the local development guide.
+* Milestone 7 is marked complete with tests and documentation.
+
+---
+
 # Milestone Dependencies
 
 The milestones intentionally form a progression:
@@ -594,6 +619,9 @@ M5 ASP.NET Core
      │
      ▼
 M6 Providers
+     │
+     ▼
+M7 Developer Experience
 ```
 
 The project should not depend on SQL or an HTTP endpoint to validate the language.
