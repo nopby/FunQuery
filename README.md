@@ -101,10 +101,10 @@ The roadmap is divided into vertical milestones. Each milestone has a concrete d
 | 2         | First vertical slice     | ✅      |
 | 3         | Completing the language  | ✅      |
 | 4         | Function set v1          | ✅     |
-| 5         | ASP.NET Core integration | ⏳      |
+| 5         | ASP.NET Core integration | ✅     |
 | 6         | Providers                | ⏳      |
 
-See [`docs/milestones.md`](docs/milestones.md) for the detailed roadmap.
+See [`docs/Milestones.md`](docs/Milestones.md) for the detailed roadmap.
 
 ## Language Direction
 
@@ -172,8 +172,8 @@ Only after that vertical slice is stable will additional functions and external 
 
 ### HTTP host (Milestone 5)
 
-Milestone 5 is in progress. M5.1–M5.6 add a runnable ASP.NET Core host with GET and POST, the error
-contract, registered sources, query variables, and execution limits:
+Milestone 5 is complete. The host provides GET and POST, the error contract, registered sources, query
+variables, and execution limits:
 
 ```bash
 dotnet run --project hosts/FunQuery.Server
@@ -195,7 +195,12 @@ curl -X POST http://localhost:5000/query \
   -d '{"query":"$source(@source).$filter(id gt @min).$count()","source":"orders","variables":{"min":1}}'
 ```
 
-M5.7 (hardening and the final documentation pass) remains. See
-[`docs/Milestone5.md`](docs/Milestone5.md) for the staged plan,
-[`docs/HttpApi.md`](docs/HttpApi.md) for the GET/POST, variables, limits, and error contract, and
-[`docs/Sources.md`](docs/Sources.md) for source registration and schema.
+The host is also published with Native AOT:
+
+```bash
+dotnet publish hosts/FunQuery.Server -c Release -r win-x64
+```
+
+See [`docs/Milestone5.md`](docs/Milestone5.md) for the staged plan,
+[`docs/HttpApi.md`](docs/HttpApi.md) for the GET/POST endpoints, variables, limits, security, and error
+contract, and [`docs/Sources.md`](docs/Sources.md) for source registration and schema.

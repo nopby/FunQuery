@@ -1,8 +1,8 @@
 # FunQuery HTTP API
 
-This document specifies the HTTP surface of the ASP.NET Core adapter. It currently covers Milestone
-5.1–5.6 (GET, POST, the error contract, registered sources, query variables, and execution limits);
-the final hardening and documentation pass is M5.7 in [`Milestone5.md`](Milestone5.md).
+This document specifies the HTTP surface of the ASP.NET Core adapter. Milestone 5 is complete: GET,
+POST, the error contract, registered sources, query variables, and execution limits are implemented and
+covered by integration tests. See [`Milestone5.md`](Milestone5.md) for the staged plan.
 
 ## GET /query
 
@@ -206,11 +206,24 @@ builder.Services.AddFunQuery(options =>
 });
 ```
 
-Time and result-size limits arrive in M5.6.
+## Security
 
-## Not yet available
+The adapter is meant to accept input from untrusted clients. The rules below are part of the contract:
 
-* OpenAPI document — M5.7, optional.
+| Area | Rule |
+| ---- | ---- |
+| Data access | Only sources registered at startup are reachable. `SourceRegistry` has no enumeration API, and an unknown name returns `UNKNOWN_SOURCE` without listing registered sources |
+| Serialization | Request and error DTOs use a source-generated `JsonSerializerContext`; query results use the manual `ValueJson` writer. No reflection-based serializer |
+| Errors | Non-internal errors return the stable code and message only. Internal errors return `INTERNAL_ERROR` with a generic message; the real exception goes to the server log. No stack traces, file paths, SQL, or request bodies are returned |
+| Query limits | Input length, token count, parser depth, source rows, parameter count/value length, body bytes, execution time, and result items are enforced before or during execution |
+| Cancellation | Client disconnect sets `RequestAborted`; execution stops and no response is written |
+| AOT | The sample host is published with Native AOT; endpoints use `RequestDelegate`, so there is no reflection-based handler binding |
+
+See [`Sources.md`](Sources.md) for the source whitelist and row contract.
+
+## Not included
+
+* OpenAPI document. It is optional and was not part of the M5 definition of done.
 
 ## Host setup
 
@@ -227,5 +240,12 @@ app.MapFunQueryEndpoints();
 app.Run();
 ```
 
-`MapFunQueryEndpoints` adds the error filter to the endpoint, so no separate error middleware is required
-for this endpoint.
+`MapFunQueryEndpoints` maps both GET and POST; each handler owns its error path, so no separate error
+middleware is required. The endpoints use `RequestDelegate`, which keeps them compatible with Native
+AOT.
+
+Publish the sample host as a native binary:
+
+```bash
+dotnet publish hosts/FunQuery.Server -c Release -r win-x64
+```

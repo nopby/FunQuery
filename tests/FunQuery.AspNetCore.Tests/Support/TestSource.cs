@@ -25,12 +25,14 @@ internal sealed class TestSource : IQuerySource
     public SourceCapabilities Capabilities => SourceCapabilities.All;
 
     /// <summary>Berapa kali <see cref="LoadAsync"/> dipanggil; membuktikan analisis mendahului load.</summary>
-    public int LoadCount { get; private set; }
+    public int LoadCount => Volatile.Read(ref _loadCount);
+
+    private int _loadCount;
 
     public ValueTask<IReadOnlyList<IReadOnlyDictionary<string, object?>>> LoadAsync(
         CancellationToken cancellationToken)
     {
-        LoadCount++;
+        Interlocked.Increment(ref _loadCount);
         return ValueTask.FromResult(_rows);
     }
 

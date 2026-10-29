@@ -23,84 +23,64 @@ public static class FunQueryEndpointRouteBuilderExtensions
 
         var options = endpoints.ServiceProvider.GetRequiredService<FunQueryOptions>();
 
-        endpoints
-            .MapGet(
-                options.Route,
-                (HttpContext context, QueryEngine engine, SourceRegistry sources) =>
-                    HandleGetAsync(context, engine, options, sources))
-            .AddEndpointFilter(QueryErrorFilter);
+        // RequestDelegate (bukan Delegate) agar endpoint tetap kompatibel dengan Native AOT:
+        // tidak ada reflection untuk mengikat parameter handler.
+        RequestDelegate get = context => HandleGetAsync(context, options);
+        RequestDelegate post = context => HandlePostAsync(context, options);
 
-        endpoints
-            .MapPost(
-                options.Route,
-                (HttpContext context, QueryEngine engine, SourceRegistry sources) =>
-                    HandlePostAsync(context, engine, options, sources))
-            .AddEndpointFilter(QueryErrorFilter);
+        endpoints.MapGet(options.Route, get);
+        endpoints.MapPost(options.Route, post);
 
         return endpoints;
     }
 
-    private static async Task<IResult> HandleGetAsync(
-        HttpContext context,
-        QueryEngine engine,
-        FunQueryOptions options,
-        SourceRegistry sources)
-    {
-        var queryValues = context.Request.Query[options.QueryParameter];
-        var query = queryValues.Count > 0 ? queryValues[0] : null;
-
-        if (string.IsNullOrWhiteSpace(query))
+    private static Task HandleGetAsync(HttpContext context, FunQueryOptions options) =>
+        RunWithErrorsAsync(context, async () =>
         {
-            throw InvalidRequest(
-                $"The '{options.QueryParameter}' query parameter is required.");
-        }
+            var queryValues = context.Request.Query[options.QueryParameter];
+            var query = queryValues.Count > 0 ? queryValues[0] : null;
 
-        var sourceName = context.Request.Query[options.SourceParameter].FirstOrDefault();
-        var variables = QueryStringVariables.Read(context.Request.Query, options.Limits);
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                throw InvalidRequest(
+                    $"The '{options.QueryParameter}' query parameter is required.");
+            }
 
-        return await ExecuteAsync(
-            context,
-            engine,
-            options,
-            sources,
-            query,
-            sourceName,
-            variables);
-    }
+            var sourceName = context.Request.Query[options.SourceParameter].FirstOrDefault();
+            var variables = QueryStringVariables.Read(context.Request.Query, options.Limits);
 
-    private static async Task<IResult> HandlePostAsync(
-        HttpContext context,
-        QueryEngine engine,
-        FunQueryOptions options,
-        SourceRegistry sources)
-    {
-        var request = await QueryRequestReader.ReadAsync(context, options);
-        var query = request.Query;
+            return await ExecuteAsync(context, options, query, sourceName, variables);
+        });
 
-        if (string.IsNullOrWhiteSpace(query))
-            throw InvalidRequest("The 'query' field is required.");
+    private static Task HandlePostAsync(HttpContext context, FunQueryOptions options) =>
+        RunWithErrorsAsync(context, async () =>
+        {
+            var request = await QueryRequestReader.ReadAsync(context, options);
+            var query = request.Query;
 
-        var variables = QueryRequestReader.ReadVariables(request, options.Limits);
+            if (string.IsNullOrWhiteSpace(query))
+                throw InvalidRequest("The 'query' field is required.");
 
-        return await ExecuteAsync(
-            context,
-            engine,
-            options,
-            sources,
-            query,
-            request.Source,
-            variables);
-    }
+            var variables = QueryRequestReader.ReadVariables(request, options.Limits);
+
+            return await ExecuteAsync(
+                context,
+                options,
+                query,
+                request.Source,
+                variables);
+        });
 
     private static async Task<IResult> ExecuteAsync(
         HttpContext context,
-        QueryEngine engine,
         FunQueryOptions options,
-        SourceRegistry sources,
         string query,
         string? sourceName,
         QueryEnvironment variables)
     {
+        var engine = context.RequestServices.GetRequiredService<QueryEngine>();
+        var sources = context.RequestServices.GetRequiredService<SourceRegistry>();
+
         IQuerySource? source = null;
         var typeEnvironment = variables;
 
@@ -150,38 +130,43 @@ public static class FunQueryEndpointRouteBuilderExtensions
             Encoding.UTF8);
     }
 
-    private static QueryException InvalidRequest(string message) =>
-        new(QueryErrorCode.InvalidRequest, message);
-
     /// <summary>
     /// Satu pintu untuk semua kegagalan endpoint: input error memakai kode dan posisinya,
     /// exception tak terduga menjadi 500 generik tanpa membocorkan detail.
     /// </summary>
-    private static async ValueTask<object?> QueryErrorFilter(
-        EndpointFilterInvocationContext context,
-        EndpointFilterDelegate next)
+    private static async Task RunWithErrorsAsync(
+        HttpContext context,
+        Func<Task<IResult>> action)
     {
         try
         {
-            return await next(context);
+            var result = await action();
+            await result.ExecuteAsync(context);
         }
-        catch (OperationCanceledException) when (context.HttpContext.RequestAborted.IsCancellationRequested)
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
             // Klien sudah pergi; tidak ada respons yang perlu ditulis.
             throw;
         }
         catch (QueryException error)
         {
-            return QueryErrorResults.ToResult(QueryErrorResults.From(error));
+            await QueryErrorResults
+                .ToResult(QueryErrorResults.From(error))
+                .ExecuteAsync(context);
         }
         catch (Exception error)
         {
-            context.HttpContext.RequestServices
+            context.RequestServices
                 .GetRequiredService<ILoggerFactory>()
                 .CreateLogger("FunQuery.AspNetCore")
                 .LogError(error, "The query failed with an unexpected error.");
 
-            return QueryErrorResults.ToResult(QueryErrorResults.Unexpected());
+            await QueryErrorResults
+                .ToResult(QueryErrorResults.Unexpected())
+                .ExecuteAsync(context);
         }
     }
+
+    private static QueryException InvalidRequest(string message) =>
+        new(QueryErrorCode.InvalidRequest, message);
 }

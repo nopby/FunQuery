@@ -47,7 +47,7 @@ into `FunQuery.dll`.
 | M5.4  | Query variables (GET)                   | M5.3       | M    | ✅     |
 | M5.5  | POST endpoint and request contract      | M5.4       | S    | ✅     |
 | M5.6  | Execution limits and cancellation       | M5.3       | M    | ✅     |
-| M5.7  | Hardening, docs, and milestone close-out | M5.1–M5.6 | M    | ⏳     |
+| M5.7  | Hardening, docs, and milestone close-out | M5.1–M5.6 | M    | ✅     |
 
 ---
 
@@ -357,7 +357,16 @@ This is the largest stage: it adds the only new core API in M5 and the security 
   * error messages contain no server paths or stack traces;
   * source names are not enumerable;
   * body and query size limits active.
-* Optional, only if cheap: OpenAPI document generated from the endpoints.
+* Optional, only if cheap: OpenAPI document generated from the endpoints. It was not included.
+
+### Result
+
+* `dotnet test`: 952 unit + 103 integration = 1055 tests green.
+* Native AOT publish (`win-x64`) succeeded. The published binary served GET, source + variables, POST,
+  and structured errors.
+* Concurrency tests cover parallel requests with different sources and variables; each source records
+  exactly the requests that used it.
+* The security checklist is documented in [`HttpApi.md`](HttpApi.md#security).
 
 ### Definition of Done
 
@@ -368,9 +377,10 @@ This is the largest stage: it adds the only new core API in M5 and the security 
 
 ---
 
-## Cross-cutting contracts (decisions to confirm)
+## Cross-cutting contracts (as implemented)
 
-These are the choices the stages above assume. Confirm or change them before M5.1:
+These are the choices the implementation made. They are documented here so a later change is a
+deliberate decision rather than an accident:
 
 1. **One source per request.** `?source=<name>` binds `@source`; multiple sources in one query are out of
    scope for M5. Alternative: `src.<variable>=<name>` for many sources, at the cost of a larger surface.
