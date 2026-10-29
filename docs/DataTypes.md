@@ -14,6 +14,7 @@ Type names below are the names used in error messages (`Cannot compare string wi
 | `decimal` | `1.5`                      | `System.Decimal`                | v1     |
 | `string`  | `'hello'`                  | `System.String`                 | v1     |
 | `bool`    | `true`, `false`            | `System.Boolean`                | v1     |
+| `date`    | `$date('2024-01-15')`      | `System.DateOnly`               | v1     |
 | `null`    | `null`                     | absence of a value              | v1     |
 | `array`   | `[1, 2, 3]`                | ordered list of one element type| v1     |
 | `object`  | `{id: 1, name: 'x'}`       | ordered set of named fields     | v1     |
@@ -116,6 +117,28 @@ How a provider maps its schema types to language types is decided when providers
 * Booleans can be tested for equality (`eq`, `neq`) but have no order: `gt`, `gte`, `lt`, `lte` are rejected.
 * The operands of `and` and `or`, and the predicate of `$filter`, must be `bool`. A number is not truthy.
 
+## Dates
+
+A date is a calendar day without a time and without a time zone.
+
+* There is no date literal. A `date` value is produced only by `$date(text)`, which parses the strict ISO
+  form `yyyy-MM-dd` (see [`Functions.md`](Functions.md#date)). Parsing is invariant and never depends on
+  the server's culture: `15/01/2024`, `2024-1-5`, and `2024-01-15T00:00:00` are rejected.
+* In memory a date is `System.DateOnly`. JSON output uses the same ISO string: `"2024-01-15"`.
+* Dates are ordered scalars: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, and `in` work, and ordering is
+  chronological. `$sort` accepts a date key, and `$distinct` compares dates by value.
+* A date is never compared with a `string`, a number, or a `bool`; that is `TYPE_MISMATCH`. There is no
+  implicit conversion between a date and its textual form.
+* `$date(null)` is `null`. A date field that is missing or null reads as `null` and follows the same
+  two-valued comparison rules as every other null value (see [Null](#null)).
+* Dates do not unify with other types: `[$date('2024-01-15'), '2024-01-16']` is
+  `INCOMPATIBLE_ELEMENT_TYPES`.
+
+```
+$source([{d: '2024-01-15'}]).$filter($date(d) gt $date('2024-01-01'))
+$date('2024-01-15') eq '2024-01-15'             -- TYPE_MISMATCH: a date is not a string
+```
+
 ## Null
 
 These rules are the reference that every provider must reproduce.
@@ -179,14 +202,16 @@ These types appear in the analyzer but cannot be written in a query.
 Two types can be compared when they are the same type, when both are numeric, or when one of them is `any`.
 Whether the comparison is then allowed depends on the operator (see [`Operators.md`](Operators.md)).
 
-| Left \ Right | int / long / decimal | string | bool | array / object |
-| ------------- | -------------------- | ------ | ---- | -------------- |
-| int / long / decimal | yes           | no     | no   | no             |
-| string        | no                   | yes    | no   | no             |
-| bool          | no                   | no     | yes  | no             |
-| array / object | no                  | no     | no   | no             |
+| Left \ Right | int / long / decimal | string | bool | date | array / object |
+| ------------- | -------------------- | ------ | ---- | ---- | -------------- |
+| int / long / decimal | yes           | no     | no   | no   | no             |
+| string        | no                   | yes    | no   | no   | no             |
+| bool          | no                   | no     | yes  | no   | no             |
+| date          | no                   | no     | no   | yes  | no             |
+| array / object | no                  | no     | no   | no   | no             |
 
-There is no implicit conversion between a number and a string, or between a number and a bool.
+There is no implicit conversion between a number and a string, between a number and a bool, or between a
+date and a string.
 
 ## Provider expectations
 
@@ -200,6 +225,7 @@ semantics above rather than the native semantics of the source.
 | `decimal`     | `decimal`, `numeric`, `money`        | compare by value, not by scale |
 | `string`      | `nvarchar`, `varchar`, `text`        | ordinal, case-sensitive (see [Operators](Operators.md#strings)) |
 | `bool`        | `bit`, `boolean`                     |       |
+| `date`        | `date`                               | no time or time zone; see [Dates](#dates) |
 | not available | `float`, `real`, `double precision`  | see [Floating point](#floating-point) |
 
 The types of the source columns come from the source registry (Milestone 5). A literal is sent as a typed

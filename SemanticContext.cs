@@ -418,11 +418,11 @@ public sealed class SemanticContext
     ];
 
     /// <summary>
-    /// Nilai tunggal yang boleh dibandingkan: angka, string, dan bool.
+    /// Nilai tunggal yang boleh dibandingkan: angka, string, bool, dan date.
     /// AnyType (tipe belum diketahui saat analisis) diizinkan; array dan object tidak.
     /// </summary>
     public static bool IsScalar(SemanticType type) =>
-        type is AnyType or NullType or StringType or BooleanType || IsNumeric(type);
+        type is AnyType or NullType or StringType or BooleanType or DateType || IsNumeric(type);
 
     /// <summary>
     /// float dan double tidak menyimpan nilai desimal secara tepat, sehingga eq dan neq

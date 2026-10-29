@@ -1,12 +1,14 @@
-# FunQuery Functions: `$select` and `$map`
+# FunQuery Functions
 
-This document specifies the first two collection functions of Milestone 4: `$select` and `$map`. Each
-function's contract follows the format required by [`Milestones.md`](Milestones.md): name, arguments,
-argument types, return type, null behavior, collection behavior, error behavior, and provider requirements.
+This document specifies the v1 function set of Milestone 4: the collection functions (`$select`,
+`$map`, `$sort`, `$take`, `$skip`, `$count`, `$any`, `$first`, `$distinct`, `$index`) and the scalar
+functions (`$lower`, `$upper`, `$length`, `$coalesce`, `$date`). Each function's contract follows the
+format required by [`Milestones.md`](Milestones.md): name, arguments, argument types, return type, null
+behavior, collection behavior, error behavior, and provider requirements.
 
-Both functions require an array target (`TargetRule.Required`) and evaluate their arguments once per
-element, exactly like `$filter`'s predicate — `~`, plain fields, paths (`a.b`), and `$field` all work the
-same way inside them as they do inside `$filter`. See [`FieldAccess.md`](FieldAccess.md) and
+The collection functions require an array target (`TargetRule.Required`) and evaluate their arguments
+once per element, exactly like `$filter`'s predicate — `~`, plain fields, paths (`a.b`), and `$field`
+all work the same way inside them as they do inside `$filter`. See [`FieldAccess.md`](FieldAccess.md) and
 [`Variables.md`](Variables.md).
 
 ## `$map`
@@ -296,3 +298,127 @@ $source([{id: 1}, {id: 2}, {id: 3}])
     .$filter(id gt 1)                      -- keeps id 2 and 3
     .$select({no: $index(), id: id})       -- no is 0 and 1 here, not 1 and 2
 ```
+
+## Scalar functions
+
+The scalar functions are **leaf expressions**: they take no target, so they cannot be chained
+(`$source(...).$lower(...)` is `INVALID_TARGET`). They may appear anywhere an expression is allowed —
+inside `$filter`, `$map`, `$select`, `$sort`, `$any`, `$first`, `$distinct`, inside a `$let` value, or as
+the whole query. Inside a per-element function they are evaluated once per element, exactly like
+`$field`.
+
+`$lower`, `$upper`, `$length`, and `$date` share one null rule: a `null` argument produces `null`, not an
+empty string, not `0`, and not an error. `$coalesce` exists to replace a null, so it follows its own rule
+below.
+
+Every scalar function accepts an argument of type `any` (for example a field read through
+`$field(@column)`), because the real type is only known at run time. The run-time check raises
+`TYPE_MISMATCH` with the argument's position, never an unhandled cast error.
+
+### `$lower` and `$upper`
+
+**Name:** `$lower` / `$upper`
+**Arguments:** one, unnamed — a text value.
+**Argument types:** `string`, `null`, or `any`. Anything else is `TYPE_MISMATCH`.
+**Return type:** `string` (also when the argument is statically `null`).
+**Null behavior:** `null` in, `null` out.
+**Collection behavior:** not a collection function; it maps one value to one value. Inside a per-element
+function it runs once per element.
+**Error behavior:** `INVALID_ARGUMENT_COUNT` for anything other than one argument. `TYPE_MISMATCH` for a
+non-string argument, or for a non-string value behind an `any` argument at run time.
+**Provider requirements:** translates to `LOWER`/`UPPER`. Casing must be **invariant and independent of
+the server's culture or collation**, so that `$lower('ÄÖÜ')` is `'äöü'` in every provider. A provider
+that cannot guarantee invariant casing must declare that limitation in its capabilities rather than
+silently using a locale-sensitive conversion.
+
+```
+$lower('ABC')                                   -- 'abc'
+$upper('abc')                                   -- 'ABC'
+$source([{name: 'Ana'}]).$map($lower(name))     -- ['ana']
+$source([{name: 'ANA'}]).$filter($lower(name) eq 'ana')   -- the row survives
+```
+
+### `$length`
+
+**Name:** `$length`
+**Arguments:** one, unnamed — a text value.
+**Argument types:** `string`, `null`, or `any`. Anything else is `TYPE_MISMATCH`.
+**Return type:** `long`.
+**Null behavior:** `null` in, `null` out — **not** `0`. `$length(name) eq 0` is false when `name` is
+null, and `$length(name) gt 3` is false as well.
+**Collection behavior:** not a collection function; one value in, one number out.
+**Error behavior:** `INVALID_ARGUMENT_COUNT` for anything other than one argument. `TYPE_MISMATCH` for a
+non-string argument, or for a non-string value behind an `any` argument at run time.
+**Provider requirements:** translates to the provider's string length function. The count is in
+**UTF-16 code units**, the same unit string ordering uses (see
+[`DataTypes.md`](DataTypes.md#strings)): `$length('😀')` is `2`. A provider whose native length counts
+Unicode code points instead must document that difference in its capabilities instead of silently
+returning a different number.
+
+```
+$length('')                                     -- 0
+$length('abc')                                  -- 3
+$source([{name: 'abcd'}]).$filter($length(name) gt 3)
+$source([...]).$take($length('ab'))             -- $length returns long, so it feeds $take/$skip
+```
+
+### `$coalesce`
+
+**Name:** `$coalesce`
+**Arguments:** one or more, variadic, in order.
+**Argument types:** any type, but all arguments must be **compatible** with each other (see
+[`DataTypes.md`](DataTypes.md#compatibility-summary)). Numbers of different types widen
+(`$coalesce(null, 1, 2.5)` is `decimal`), `null` unifies with anything, and arrays and objects unify
+structurally.
+**Return type:** the unified type of all arguments. With every argument `null`, the return type is
+`null`. The selected value is returned **unchanged**; the function never converts it to the unified type
+(`$coalesce(1, 2.5)` is statically `decimal` but still yields the integer `1`).
+**Null behavior:** returns the first argument that is not `null`; if every argument is `null`, the result
+is `null`.
+**Collection behavior:** not a collection function. Arguments are evaluated **lazily, left to right**:
+once an argument produces a non-null value, the later arguments are not evaluated at all. This is part of
+the contract, not an implementation detail — it is what makes `$coalesce(name, $lower($field(@other)))`
+safe when `name` is present and `other` holds a non-string.
+**Error behavior:** `INVALID_ARGUMENT_COUNT` with no arguments. `TYPE_MISMATCH` when two argument types
+cannot be unified; the error points at the first argument that does not fit.
+**Provider requirements:** translates to `COALESCE(...)` or the language's null-coalescing operator.
+Argument order and laziness must be preserved.
+
+```
+$coalesce(null, 'a')                            -- 'a'
+$coalesce(null, null)                           -- null
+$coalesce(null, 1, 2.5)                         -- 1, statically decimal
+$source([{a: null, b: 'x'}]).$map($coalesce(a, b))   -- ['x']
+```
+
+### `$date`
+
+**Name:** `$date`
+**Arguments:** one, unnamed — the text of a date.
+**Argument types:** `string`, `null`, or `any`. The text must be exactly `yyyy-MM-dd` (ISO 8601,
+date only): two digits for month and day, `-` as the separator, no time part, no time zone, no leading or
+trailing space, and no culture-dependent form such as `15/01/2024`. `'2024-02-29'` is valid;
+`'2023-02-29'`, `'2024-1-5'`, and `'2024-01-15T00:00:00'` are not.
+**Return type:** `date` (see [`DataTypes.md`](DataTypes.md#dates)).
+**Null behavior:** `null` in, `null` out.
+**Collection behavior:** not a collection function; one text in, one date out. It is the only way to
+produce a `date` in v1, because the language has no date literal.
+**Error behavior:** `INVALID_ARGUMENT_COUNT` for anything other than one argument. `TYPE_MISMATCH` for a
+non-string argument, or for a non-string value behind an `any` argument at run time. `INVALID_DATE` for a
+string literal whose format is wrong — reported during semantic analysis, before execution — and for a
+field or variable whose run-time text is not a valid date.
+**Provider requirements:** translates to the provider's `DATE` type and to parsing with the same strict
+format. Values are passed as typed parameters. A provider must not accept a `DATETIME`/`TIMESTAMP` column
+as a `date` without documenting the conversion, because that would silently change the value's meaning.
+
+```
+$date('2024-01-15')                              -- the date 2024-01-15
+$source([{d: '2024-01-15'}]).$map($date(d))
+$source([...]).$filter($date(d) gt $date('2024-02-01'))
+$date(null)                                      -- null
+```
+
+Because `date` is an ordered scalar, it works with `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`,
+`$sort`, `$distinct`, and `$coalesce`. A date is never compared with a string or a number; that is
+`TYPE_MISMATCH` (see [`Operators.md`](Operators.md#dates)).
+

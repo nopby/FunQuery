@@ -169,7 +169,68 @@ public sealed class CoreFunctions : IQueryExtension
             AcceptsTarget = t => t is ArrayType,
             ReturnType = target => target ?? SemanticTypeOptions.Unknown,
         });
+
+        registry.Add(new FunctionDefinition
+        {
+            Name = "$lower",
+            Parameters = [TextParameter],
+            TargetRule = TargetRule.Forbidden,
+            ReturnType = _ => SemanticTypeOptions.String,
+        });
+
+        registry.Add(new FunctionDefinition
+        {
+            Name = "$upper",
+            Parameters = [TextParameter],
+            TargetRule = TargetRule.Forbidden,
+            ReturnType = _ => SemanticTypeOptions.String,
+        });
+
+        registry.Add(new FunctionDefinition
+        {
+            Name = "$length",
+            Parameters = [TextParameter],
+            TargetRule = TargetRule.Forbidden,
+            ReturnType = _ => SemanticTypeOptions.Long,
+        });
+
+        registry.Add(new FunctionDefinition
+        {
+            // $coalesce(a, b, ...): dianalisis secara khusus (lihat AnalyzeCoalesce), karena
+            // tipe hasilnya adalah gabungan tipe semua argumen.
+            Name = "$coalesce",
+            Parameters = [AnyParameter],
+            IsVariadic = true,
+            TargetRule = TargetRule.Forbidden,
+        });
+
+        registry.Add(new FunctionDefinition
+        {
+            // $date('2024-01-15'): dianalisis secara khusus (lihat AnalyzeDate), supaya
+            // literal yang formatnya salah ditolak saat analisis, bukan saat eksekusi.
+            Name = "$date",
+            Parameters = [TextParameter],
+            TargetRule = TargetRule.Forbidden,
+        });
     }
+
+    /// <summary>
+    /// Parameter teks untuk fungsi skalar string. null diterima dan diteruskan sebagai null,
+    /// any diterima karena nilainya baru diketahui saat runtime (mis. $field(@kolom)).
+    /// </summary>
+    private static readonly ParameterDefinition TextParameter = new()
+    {
+        Name = "text",
+        Expected = "string",
+        Accepts = static type => type is StringType or NullType or AnyType,
+    };
+
+    private static readonly ParameterDefinition AnyParameter = new()
+    {
+        Name = "value",
+        Expected = "any",
+        Accepts = static _ => true,
+    };
 
     private static readonly ParameterDefinition CountParameter = new()
     {

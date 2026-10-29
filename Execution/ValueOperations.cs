@@ -21,6 +21,9 @@ public static class ValueOperations
         if (left is bool lb)
             return right is bool rb && lb == rb;
 
+        if (left is DateOnly ld)
+            return right is DateOnly rd && ld == rd;
+
         if (IsNumber(left) && IsNumber(right))
             return CompareNumbers(left, right) == 0;
 
@@ -28,7 +31,7 @@ public static class ValueOperations
     }
 
     /// <summary>
-    /// Membandingkan dua nilai yang berurutan (angka atau string).
+    /// Membandingkan dua nilai yang berurutan (angka, string, atau date).
     /// Mengembalikan false, tanpa hasil, bila salah satunya null atau tidak berurutan.
     /// Dengan begitu gt, gte, lt, dan lte bernilai false untuk null.
     /// </summary>
@@ -42,6 +45,12 @@ public static class ValueOperations
         if (left is string ls && right is string rs)
         {
             result = string.CompareOrdinal(ls, rs);
+            return true;
+        }
+
+        if (left is DateOnly ld && right is DateOnly rd)
+        {
+            result = ld.CompareTo(rd);
             return true;
         }
 

@@ -490,6 +490,131 @@ internal static class CoreInMemoryFunctions
         };
     }
 
+    /// <summary>$lower(text): huruf kecil secara invariant. null tetap null.</summary>
+    public static Func<object?, object?> Lower(InMemoryCompiler compiler, CallExpression call)
+    {
+        var text = compiler.Compile(call.Arguments[0]);
+
+        return element => text(element) switch
+        {
+            null => null,
+            string value => value.ToLowerInvariant(),
+            var other => throw RuntimeTypeError(call, "$lower", "string", other),
+        };
+    }
+
+    /// <summary>$upper(text): huruf besar secara invariant. null tetap null.</summary>
+    public static Func<object?, object?> Upper(InMemoryCompiler compiler, CallExpression call)
+    {
+        var text = compiler.Compile(call.Arguments[0]);
+
+        return element => text(element) switch
+        {
+            null => null,
+            string value => value.ToUpperInvariant(),
+            var other => throw RuntimeTypeError(call, "$upper", "string", other),
+        };
+    }
+
+    /// <summary>
+    /// $length(text): jumlah UTF-16 code unit, satuan yang sama dengan pengurutan string
+    /// (lihat docs/DataTypes.md#strings). null tetap null, bukan 0.
+    /// </summary>
+    public static Func<object?, object?> Length(InMemoryCompiler compiler, CallExpression call)
+    {
+        var text = compiler.Compile(call.Arguments[0]);
+
+        return element => text(element) switch
+        {
+            null => null,
+            string value => (long)value.Length,
+            var other => throw RuntimeTypeError(call, "$length", "string", other),
+        };
+    }
+
+    /// <summary>
+    /// $coalesce(a, b, ...): nilai pertama yang bukan null, atau null bila semuanya null.
+    /// Argumen dihitung lazy dan berurutan: argumen berikutnya tidak dievaluasi setelah ada
+    /// nilai yang bukan null, sama seperti operator ?? di C#.
+    /// </summary>
+    public static Func<object?, object?> Coalesce(InMemoryCompiler compiler, CallExpression call)
+    {
+        var arguments = call.Arguments.Select(compiler.Compile).ToArray();
+
+        return element =>
+        {
+            foreach (var argument in arguments)
+            {
+                var value = argument(element);
+
+                if (value is not null)
+                    return value;
+            }
+
+            return null;
+        };
+    }
+
+    /// <summary>
+    /// $date('yyyy-MM-dd'): parse teks tanggal menjadi date. Formatnya satu-satunya yang
+    /// diterima bahasa (lihat DateFormat). null tetap null; teks yang salah menjadi
+    /// INVALID_DATE, bukan exception mentah dari DateOnly.
+    /// </summary>
+    public static Func<object?, object?> Date(InMemoryCompiler compiler, CallExpression call)
+    {
+        var text = compiler.Compile(call.Arguments[0]);
+
+        return element =>
+        {
+            var value = text(element);
+
+            if (value is null)
+                return null;
+
+            if (value is not string s)
+                throw RuntimeTypeError(call, "$date", "string", value);
+
+            if (!DateFormat.TryParse(s, out var date))
+                throw new QueryException(
+                    QueryErrorCode.InvalidDate,
+                    $"'{s}' is not a valid date. Use the ISO format yyyy-MM-dd.",
+                    call.Arguments[0].Span);
+
+            return date;
+        };
+    }
+
+    /// <summary>
+    /// Argumen fungsi skalar bisa bertipe any saat analisis (mis. $field(@kolom)), jadi tipe
+    /// sebenarnya baru diperiksa di sini. Error tetap TYPE_MISMATCH dengan posisi argumen.
+    /// </summary>
+    private static QueryException RuntimeTypeError(
+        CallExpression call,
+        string function,
+        string expected,
+        object? value) =>
+        new(
+            QueryErrorCode.TypeMismatch,
+            $"Argument 1 of '{function}' expects {expected} at run time, got {RuntimeTypeName(value)}.",
+            call.Arguments[0].Span);
+
+    private static string RuntimeTypeName(object? value) =>
+        value switch
+        {
+            null => "null",
+            string => "string",
+            bool => "bool",
+            int => "int",
+            long => "long",
+            decimal => "decimal",
+            double => "double",
+            float => "float",
+            DateOnly => "date",
+            ObjectValue => "object",
+            IEnumerable<object?> => "array",
+            _ => value.GetType().Name,
+        };
+
     private static Func<object?, object?> TargetOf(InMemoryCompiler compiler, CallExpression call) =>
         compiler.Compile(
             call.Target

@@ -39,7 +39,7 @@ public sealed class InMemoryFunctions
     public bool TryGet(string name, [NotNullWhen(true)] out InMemoryFunction? implementation) =>
         _functions.TryGetValue(name, out implementation);
 
-    /// <summary>Implementasi function inti: $source, $let, $field, $filter, $select, $map, $sort, $take, $skip, $count, $any, $first, $distinct.</summary>
+    /// <summary>Implementasi function inti: $source, $let, $field, $filter, $select, $map, $sort, $take, $skip, $count, $any, $first, $distinct, $index, dan fungsi skalar $lower, $upper, $length, $coalesce, $date.</summary>
     public static InMemoryFunctions CreateDefault() =>
         new InMemoryFunctions()
             .Add("$source", CoreInMemoryFunctions.Source)
@@ -55,5 +55,10 @@ public sealed class InMemoryFunctions
             .Add("$any", CoreInMemoryFunctions.Any)
             .Add("$first", CoreInMemoryFunctions.First)
             .Add("$distinct", CoreInMemoryFunctions.Distinct)
-            .Add("$index", CoreInMemoryFunctions.Index);
+            .Add("$index", CoreInMemoryFunctions.Index)
+            .Add("$lower", CoreInMemoryFunctions.Lower)
+            .Add("$upper", CoreInMemoryFunctions.Upper)
+            .Add("$length", CoreInMemoryFunctions.Length)
+            .Add("$coalesce", CoreInMemoryFunctions.Coalesce)
+            .Add("$date", CoreInMemoryFunctions.Date);
 }

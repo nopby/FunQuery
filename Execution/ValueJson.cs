@@ -46,6 +46,10 @@ public static class ValueJson
                 writer.WriteStringValue(s);
                 break;
 
+            case DateOnly date:
+                writer.WriteStringValue(DateFormat.Format(date));
+                break;
+
             case int i:
                 writer.WriteNumberValue(i);
                 break;

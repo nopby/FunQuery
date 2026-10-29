@@ -38,7 +38,7 @@ public class SortTakeSkipTests
             QueryErrorCode.TypeMismatch,
             () => QueryPipeline.Analyze($"$source([{{id: 1}}]).$sort({key})"));
 
-        Assert.Contains("number or string key", error.Message);
+        Assert.Contains("number, string, or date key", error.Message);
     }
 
     [Theory]

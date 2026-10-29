@@ -40,6 +40,9 @@ public enum QueryErrorCode
     InvalidIndexArgument,
     InvalidSortDirection,
 
+    // Fungsi skalar
+    InvalidDate,
+
     // Batas keamanan (dipakai saat batas-batas itu diimplementasikan)
     InputTooLong,
     MaxDepthExceeded,

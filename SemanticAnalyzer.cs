@@ -511,6 +511,12 @@ public static class SemanticAnalyzer
         if (functionName == "$index")
             return AnalyzeIndex(expression, context);
 
+        if (functionName == "$coalesce")
+            return AnalyzeCoalesce(expression, context);
+
+        if (functionName == "$date")
+            return AnalyzeDate(expression, context);
+
         var targetType = expression.Target?.SemanticType;
 
         // 4. Analyze argumen (di dalam scope field elemen kalau fungsi membutuhkannya)
@@ -836,11 +842,11 @@ public static class SemanticAnalyzer
                     QueryErrorCode.InternalError,
                     "$sort's key has no semantic type.");
 
-            if (keyType is not (StringType or AnyType) && !SemanticContext.IsNumeric(keyType))
+            if (keyType is not (StringType or AnyType or DateType) && !SemanticContext.IsNumeric(keyType))
             {
                 throw new QueryException(
                     QueryErrorCode.TypeMismatch,
-                    $"Function '$sort' requires a number or string key, got {keyType.Name}.",
+                    $"Function '$sort' requires a number, string, or date key, got {keyType.Name}.",
                     key.Span);
             }
         }
@@ -922,6 +928,100 @@ public static class SemanticAnalyzer
         }
 
         expression.SemanticType = SemanticTypeOptions.Int;
+
+        return expression;
+    }
+
+    /// <summary>
+    /// $coalesce(a, b, ...): nilai pertama yang bukan null. Tipe hasilnya adalah gabungan
+    /// tipe semua argumen (angka melebar, null menyatu dengan tipe apa pun), sehingga hasilnya
+    /// bisa dipakai seperti nilai bertipe tunggal. Lihat docs/Functions.md.
+    /// </summary>
+    private static CallExpression AnalyzeCoalesce(CallExpression expression, SemanticContext context)
+    {
+        if (expression.Arguments.Count == 0)
+            throw new QueryException(
+                QueryErrorCode.InvalidArgumentCount,
+                "Function '$coalesce' requires at least 1 argument.",
+                expression.Function);
+
+        SemanticType? result = null;
+
+        foreach (var argument in expression.Arguments)
+        {
+            Analyze(argument, context);
+
+            var argumentType =
+                argument.SemanticType
+                ?? throw new QueryException(
+                    QueryErrorCode.InternalError,
+                    "Argument of '$coalesce' has no semantic type.");
+
+            if (result is null)
+            {
+                result = argumentType;
+                continue;
+            }
+
+            var unified = SemanticContext.Unify(result, argumentType);
+
+            if (unified is null)
+                throw new QueryException(
+                    QueryErrorCode.TypeMismatch,
+                    $"Arguments of '$coalesce' must have compatible types. " +
+                    $"Expected {result.Name}, got {argumentType.Name}.",
+                    argument.Span);
+
+            result = unified;
+        }
+
+        expression.SemanticType = result!;
+
+        return expression;
+    }
+
+    /// <summary>
+    /// $date('yyyy-MM-dd'): mengubah teks tanggal menjadi nilai date. Formatnya tetap dan
+    /// invariant (bukan culture server); literal yang salah ditolak saat analisis, bukan
+    /// menunggu eksekusi. Lihat docs/Functions.md dan docs/DataTypes.md.
+    /// </summary>
+    private static CallExpression AnalyzeDate(CallExpression expression, SemanticContext context)
+    {
+        if (expression.Arguments.Count != 1)
+            throw new QueryException(
+                QueryErrorCode.InvalidArgumentCount,
+                "Function '$date' requires exactly 1 argument: $date('yyyy-MM-dd').",
+                expression.Function);
+
+        var argument = expression.Arguments[0];
+
+        Analyze(argument, context);
+
+        var argumentType =
+            argument.SemanticType
+            ?? throw new QueryException(
+                QueryErrorCode.InternalError,
+                "Argument of '$date' has no semantic type.");
+
+        if (argumentType is not (StringType or NullType or AnyType))
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                $"Argument 1 of '$date' expects string, got {argumentType.Name}.",
+                argument.Span);
+
+        // Literal bisa diperiksa sekarang juga, jadi kesalahan format tidak menunggu eksekusi.
+        if (argument is ValueExpression { Token.Type: TokenType.StringLiteral } literal)
+        {
+            var text = context.GetStringLiteralValue(literal);
+
+            if (!DateFormat.TryParse(text, out _))
+                throw new QueryException(
+                    QueryErrorCode.InvalidDate,
+                    $"'{text}' is not a valid date. Use the ISO format yyyy-MM-dd.",
+                    argument.Span);
+        }
+
+        expression.SemanticType = SemanticTypeOptions.Date;
 
         return expression;
     }

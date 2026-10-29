@@ -74,6 +74,9 @@ public sealed class ValueEqualityComparer : IEqualityComparer<object?>
             case bool b:
                 return b ? 1 : 2;
 
+            case DateOnly date:
+                return date.GetHashCode();
+
             case int or long or decimal or double or float:
                 return NumberHash(value);
 

@@ -25,7 +25,7 @@ identifiers.
 | `startswith` | prefix test                | two `string`      | `bool` | v1     |
 | `endswith`   | suffix test                | two `string`      | `bool` | v1     |
 
-A *scalar* is a number, string, or bool. An *ordered value* is a number or a string.
+A *scalar* is a number, string, bool, or date. An *ordered value* is a number, string, or date.
 
 ## Precedence and grouping
 
@@ -74,6 +74,7 @@ The resulting matrix:
 | `int`, `long`, `decimal` (any mix)   | yes         | yes                      |
 | `string`, `string`                   | yes         | yes                      |
 | `bool`, `bool`                       | yes         | no                       |
+| `date`, `date`                       | yes         | yes                      |
 | `float` or `double` (with any number)| **no** (`x eq null` and `x neq null` are allowed) | yes |
 | the `null` literal (with any scalar) | yes         | no                       |
 | `array` or `object`                  | no          | no                       |
@@ -94,7 +95,17 @@ Comparing two literals (`1 eq 1`) is accepted.
 
 * Comparison is ordinal and case-sensitive, and does not depend on the culture of the server.
 * Ordering compares UTF-16 code units, so `'B' lt 'a'` is true.
-* For case-insensitive matching, use a function such as `$lower(name) eq 'a'` (Milestone 4).
+* For case-insensitive matching, use `$lower(name) eq 'a'` (see
+  [`Functions.md`](Functions.md#lower-and-upper)).
+
+### Dates
+
+* A `date` is ordered chronologically: `$date('2024-01-15') lt $date('2024-06-01')` is true.
+* `eq` and `neq` compare calendar days; two dates are equal when they denote the same day.
+* A date is never compared with a string or a number. `$date('2024-01-15') eq '2024-01-15'` is
+  `TYPE_MISMATCH`; convert the other side with `$date(...)` instead.
+* A date can be ordered, so `$sort` accepts a date key (see [`Functions.md`](Functions.md#sort)).
+* `in` works with dates: `$date(d) in [$date('2024-01-15'), $date('2024-02-01')]`.
 
 ### Null behavior
 
@@ -151,7 +162,7 @@ literal or an array field of the row: `'a' in tags`.
 
 | Rule | Detail |
 | ---- | ------ |
-| Left operand | a scalar (number, string, bool, or `null`). An array or object is `TYPE_MISMATCH` |
+| Left operand | a scalar (number, string, bool, date, or `null`). An array or object is `TYPE_MISMATCH` |
 | Right operand | an array, or `any`. Anything else is `TYPE_MISMATCH` (`needs an array on the right side`) |
 | Element type | must be a scalar and comparable with the left operand under `eq`: numbers mix, other types must match. `[]` has no element type, so `x in []` is valid and always false |
 | Numbers | compared by value, as for `eq`: `id in [1.0, 2.5]` matches `id` of `1` |

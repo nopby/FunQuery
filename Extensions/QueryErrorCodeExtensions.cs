@@ -36,6 +36,7 @@ public static class QueryErrorCodeExtensions
         QueryErrorCode.InvalidSelectArgument => "INVALID_SELECT_ARGUMENT",
         QueryErrorCode.InvalidIndexArgument => "INVALID_INDEX_ARGUMENT",
         QueryErrorCode.InvalidSortDirection => "INVALID_SORT_DIRECTION",
+        QueryErrorCode.InvalidDate => "INVALID_DATE",
 
         QueryErrorCode.InputTooLong => "INPUT_TOO_LONG",
         QueryErrorCode.MaxDepthExceeded => "MAX_DEPTH_EXCEEDED",
