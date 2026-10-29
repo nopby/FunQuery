@@ -209,6 +209,22 @@ dotnet publish hosts/FunQuery.Server -c Release -r win-x64
 
 Run the published binary from its output directory so `wwwroot` and `appsettings.json` are found.
 
-See [`docs/Milestone5.md`](docs/Milestone5.md) for the staged plan,
+### PostgreSQL host (M6.3)
+
+The SQL host executes registered PostgreSQL sources through the same GET/POST API:
+
+```bash
+FUNQUERY_POSTGRES="Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=postgres" \
+  dotnet run --project hosts/FunQuery.PostgreSql.Server
+```
+
+```bash
+curl "http://localhost:5000/query?source=orders&q=%24source(%40source).%24filter(total%20gt%20100).%24select(id%2C%20customer)"
+```
+
+The sample expects an `orders` table with `id integer`, `customer text`, `total numeric`, and
+`ordered_on date`. M6.3 is implemented; M6.4 adds the full semantic parity pass.
+
+See [`docs/Milestone6.md`](docs/Milestone6.md) for the staged plan,
 [`docs/HttpApi.md`](docs/HttpApi.md) for the GET/POST endpoints, variables, limits, security, and error
 contract, and [`docs/Sources.md`](docs/Sources.md) for source registration and schema.

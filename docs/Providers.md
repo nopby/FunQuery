@@ -39,7 +39,7 @@ in the dialect and the connection factory.
 src/
   FunQuery.Sql/                 shared SQL provider: plan, SQL AST, renderer,
                                 ISqlDialect, generic DbConnection executor
-  FunQuery.PostgreSql/          PostgreSQL dialect (M6.2); Npgsql source/executor (M6.3)
+  FunQuery.PostgreSql/          PostgreSQL dialect + Npgsql source/executor
   FunQuery.Linq/                optional LINQ provider (IEnumerable/IQueryable)
 hosts/
   FunQuery.Server/              references AspNetCore and the providers it enables
@@ -102,8 +102,8 @@ It does **not** need a new parser, analyzer, plan builder, or result model.
   (`null eq null` true, `null neq null` false, `null neq 5` true). Orderings keep SQL's behavior: a
   null operand is false. Boolean operands and `not` are wrapped with `COALESCE(..., FALSE)` so a null
   comparison is never unknown.
-* **Strings:** comparisons and ordering use `COLLATE "C"` (binary, case-sensitive). `contains`/`startswith`/
-  `endswith` render to `POSITION`/`LEFT`/`RIGHT` (or escaped `LIKE`) under the same collation.
+* **Strings:** comparisons and ordering use `COLLATE "C"` (binary, case-sensitive).
+  `contains`/`startswith` use `strpos`; `endswith` uses `right` + `length` under the same collation.
 * **Sorting:** `NULLS FIRST` for `asc`, `NULLS LAST` for `desc`, matching "null is the smallest value".
 * **Pagination:** `LIMIT`/`OFFSET`. The provider requires a preceding `$sort`; without an explicit order,
   SQL row order is unspecified and the result would not be reproducible.
@@ -133,6 +133,40 @@ It does **not** need a new parser, analyzer, plan builder, or result model.
 
 These are capability limitations, not silent behavior changes. A query that needs an unsupported feature
 fails with a clear error; it never falls back to in-memory execution.
+
+## Execution (M6.3)
+
+`PostgreSqlSource` implements `IQuerySourceExecutor`:
+
+```csharp
+var source = new PostgreSqlSource(
+    name: "orders",
+    schema: ordersSchema,
+    table: "orders",
+    dataSource: npgsqlDataSource,
+    commandTimeout: TimeSpan.FromSeconds(10));
+```
+
+* `Name`, `Schema`, and `Table` describe the source; `NpgsqlDataSource` is shared/pooled.
+* `ExecuteAsync(QueryPlan, QueryEnvironment, CancellationToken)` builds the `RelationalPlan`, renders
+  SQL, binds typed `NpgsqlParameter`s, and reads the result into `ObjectValue`/scalar values.
+* Parameters map to `NpgsqlDbType`: `integer`, `bigint`, `numeric`, `text`, `boolean`, `date`.
+* Object rows are materialized in schema field order; a missing result column reads as null.
+* Command timeout and the request cancellation token are propagated to Npgsql.
+* The provider is read-only: it only issues the generated `SELECT` and never writes or runs DDL.
+
+The HTTP adapter uses `IQuerySource.Executor` when present; otherwise it keeps the in-memory path.
+`PostgreSqlSource` is wrapped with `AsQuerySource(...)` for the HTTP `SourceRegistry`, so the provider
+does not reference ASP.NET Core.
+
+Integration tests use `FUNQUERY_POSTGRES`:
+
+```text
+Host=127.0.0.1;Port=5433;Username=postgres;Password=postgres;Database=postgres
+```
+
+The sample `hosts/FunQuery.PostgreSql.Server` reads `PostgreSql:ConnectionString` or
+`FUNQUERY_POSTGRES` and exposes a registered `orders` source.
 
 ## Security
 

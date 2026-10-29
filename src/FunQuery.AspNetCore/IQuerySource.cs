@@ -23,4 +23,10 @@ public interface IQuerySource
     /// </summary>
     ValueTask<IReadOnlyList<IReadOnlyDictionary<string, object?>>> LoadAsync(
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Bila tidak null, source dieksekusi oleh provider ini (mis. PostgreSQL), bukan dimuat ke
+    /// memori. Adapter memanggil executor setelah query dianalisis terhadap <see cref="Schema"/>.
+    /// </summary>
+    IQuerySourceExecutor? Executor => null;
 }

@@ -27,7 +27,7 @@ one starts.
 | M6.0a | Query playground                           | —          | S    | ✅     |
 | M6.1  | Provider contract and relational plan      | —          | L    | ✅     |
 | M6.2  | SQL core and PostgreSQL dialect            | M6.1       | L    | ✅     |
-| M6.3  | PostgreSQL execution and sources           | M6.2       | L    | ⏳     |
+| M6.3  | PostgreSQL execution and sources           | M6.2       | L    | ✅     |
 | M6.4  | Semantic parity and capability enforcement | M6.3       | M    | ⏳     |
 | M6.5  | HTTP integration and hardening             | M6.4       | M    | ⏳     |
 | M6.6  | Documentation and close-out                | M6.1–M6.5  | S    | ⏳     |
@@ -207,6 +207,20 @@ one starts.
 * A registered PostgreSQL source runs through the HTTP host.
 * The in-memory path still works unchanged.
 * No connection string or SQL text appears in client errors.
+
+### Result
+
+* `PostgreSqlSource` implements `IQuerySourceExecutor`: plan building, SQL rendering, typed
+  `NpgsqlParameter`s, command timeout, cancellation, and row materialization into `ObjectValue`.
+* The HTTP adapter uses `IQuerySource.Executor` when present and otherwise keeps the in-memory path.
+* `PostgreSqlSource` is wrapped with `AsQuerySource(...)` for the HTTP `SourceRegistry`; the provider
+  itself does not reference ASP.NET Core.
+* Live integration tests passed against PostgreSQL 18 (Podman, `127.0.0.1:5433`) using
+  `FUNQUERY_POSTGRES`.
+* `hosts/FunQuery.PostgreSql.Server` serves GET and POST against a real `orders` table; both were
+  smoke-tested successfully.
+* `tests/FunQuery.PostgreSql.Tests` has 38 tests: 23 golden SQL, 4 parameter binder, 4 row reader, and
+  7 live integration tests.
 
 ---
 

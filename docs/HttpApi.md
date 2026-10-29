@@ -72,6 +72,11 @@ The schema is known before loading, so an unknown field or a wrong comparison is
 reading the source. The selected rows are validated against the schema; a mismatch is `TYPE_MISMATCH`.
 See [`Sources.md`](Sources.md) for registration, the row contract, capabilities, and limits.
 
+A source may also be executed by a provider instead of being loaded into memory. The HTTP adapter
+analyzes the query against the source schema, then calls the source's `IQuerySourceExecutor`
+(for example the PostgreSQL provider). The `@source` binding and the error envelope are identical;
+only the execution path differs.
+
 ## Variables
 
 On GET, every query parameter named `v.<name>` becomes the variable `@name`. On POST, the same names

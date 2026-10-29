@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/hosts/">
+    <Project Path="hosts/FunQuery.PostgreSql.Server/FunQuery.PostgreSql.Server.csproj" />
     <Project Path="hosts/FunQuery.Server/FunQuery.Server.csproj" />
   </Folder>
   <Folder Name="/src/">

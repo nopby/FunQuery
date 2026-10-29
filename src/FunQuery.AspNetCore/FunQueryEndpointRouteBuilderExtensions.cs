@@ -103,6 +103,19 @@ public static class FunQueryEndpointRouteBuilderExtensions
         // perbandingan yang salah tipe gagal di sini, bukan setelah source dimuat.
         var plan = engine.Prepare(query, typeEnvironment);
 
+        if (source is not null && source.Executor is not null)
+        {
+            var result = await source.Executor.ExecuteAsync(
+                plan,
+                variables,
+                context.RequestAborted);
+
+            return Results.Text(
+                ValueJson.Serialize(result),
+                "application/json",
+                Encoding.UTF8);
+        }
+
         var valueEnvironment = variables;
 
         if (source is not null)
