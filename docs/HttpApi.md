@@ -206,6 +206,39 @@ builder.Services.AddFunQuery(options =>
 });
 ```
 
+## Playground
+
+The sample host serves a developer playground at `/playground/` when `Playground:Enabled` is true (the
+sample `appsettings.json` enables it). It is a static page that calls `POST /query`:
+
+* query editor, source input with a datalist, variables JSON editor;
+* examples and history in `localStorage`;
+* `Ctrl`+`Enter` to run;
+* pretty JSON results and the structured error envelope.
+
+`GET /playground/config` returns the examples and source names. Source names are only included when
+`Playground:ExposeSourceNames` is true; otherwise the list is empty and source-based examples are
+omitted. The playground is opt-in: when disabled, the page, assets, and config endpoint return `404`.
+
+```json
+{
+  "Playground": {
+    "Enabled": true,
+    "ExposeSourceNames": true
+  }
+}
+```
+
+Security:
+
+* CSP `default-src 'self'`, no inline scripts/styles, no CDN;
+* `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`;
+* no connection strings or SQL in the page or config;
+* disable it in production.
+
+The published AOT binary must run from its publish directory so `wwwroot` and `appsettings.json` are
+found.
+
 ## Security
 
 The adapter is meant to accept input from untrusted clients. The rules below are part of the contract:

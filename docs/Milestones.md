@@ -492,6 +492,9 @@ The HTTP integration must enforce limits for:
 
 **Goal:** execute the same semantic query against external data providers.
 
+The staged work plan for this milestone is in [`Milestone6.md`](Milestone6.md); the provider architecture
+decision is in [`Providers.md`](Providers.md).
+
 ## Provider Abstraction
 
 Introduce a provider interface and a capability model.

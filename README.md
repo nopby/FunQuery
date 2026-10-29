@@ -181,6 +181,12 @@ curl "http://localhost:5000/query?q=%24source(%5B1%2C2%2C3%5D).%24count()"
 curl "http://localhost:5000/query?source=orders&q=%24source(%40source).%24filter(id%20gt%201).%24select(id%2C%20customer)"
 ```
 
+#### Playground (M6.0a)
+
+Open <http://localhost:5000/playground/> to try queries in the browser. The playground is a developer
+tool: it is enabled by `Playground:Enabled` in the sample `appsettings.json`, and source names are only
+listed when `Playground:ExposeSourceNames` is true. Disable both in production.
+
 Query variables are supplied as `v.<name>`:
 
 ```bash
@@ -200,6 +206,8 @@ The host is also published with Native AOT:
 ```bash
 dotnet publish hosts/FunQuery.Server -c Release -r win-x64
 ```
+
+Run the published binary from its output directory so `wwwroot` and `appsettings.json` are found.
 
 See [`docs/Milestone5.md`](docs/Milestone5.md) for the staged plan,
 [`docs/HttpApi.md`](docs/HttpApi.md) for the GET/POST endpoints, variables, limits, security, and error

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>FunQuery Playground</title>
+  <link rel="stylesheet" href="/playground/playground.css">
+  <script src="/playground/playground.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>FunQuery Playground</h1>
+      <p class="hint">Try queries against the sample host. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to run.</p>
+    </div>
+    <span id="status" class="status" role="status" aria-live="polite"></span>
+  </header>
+
+  <main>
+    <section class="panel editor" aria-label="Query editor">
+      <div class="field-row">
+        <label for="source">Source</label>
+        <input id="source" list="source-list" placeholder="orders (optional)"
+               autocomplete="off" spellcheck="false">
+        <datalist id="source-list"></datalist>
+      </div>
+
+      <div class="field-row">
+        <label for="examples">Example</label>
+        <select id="examples">
+          <option value="">Custom…</option>
+        </select>
+      </div>
+
+      <label for="query">Query</label>
+      <textarea id="query" spellcheck="false" autocomplete="off" autocapitalize="off"
+                placeholder="$source([1, 2, 3]).$count()"></textarea>
+
+      <label for="variables">Variables (JSON object, optional)</label>
+      <textarea id="variables" class="variables" spellcheck="false" autocomplete="off"
+                placeholder='{"min": 100}'></textarea>
+
+      <div class="actions">
+        <button id="run" type="button" class="primary">Run</button>
+        <select id="history" aria-label="History">
+          <option value="">History…</option>
+        </select>
+        <button id="clear" type="button">Clear output</button>
+      </div>
+    </section>
+
+    <section class="panel output" aria-label="Response">
+      <div class="output-head">
+        <span>Response</span>
+        <span class="hint">JSON</span>
+      </div>
+      <pre id="result" aria-live="polite"></pre>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Developer tool. Source names are listed only when <code>ExposeSourceNames</code> is enabled.</span>
+  </footer>
+</body>
+</html>
