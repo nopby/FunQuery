@@ -39,15 +39,15 @@ into `FunQuery.dll`.
 
 ## Stage overview
 
-| Stage | Name                                   | Depends on | Size |
-| ----- | -------------------------------------- | ---------- | ---- |
-| M5.1  | Host skeleton and GET pipeline          | —          | M    |
-| M5.2  | Structured errors and status mapping    | M5.1       | S    |
-| M5.3  | Typed parameters, source registry, schema | M5.1     | L    |
-| M5.4  | Query variables (GET)                   | M5.3       | M    |
-| M5.5  | POST endpoint and request contract      | M5.4       | S    |
-| M5.6  | Execution limits and cancellation       | M5.3       | M    |
-| M5.7  | Hardening, docs, and milestone close-out | M5.1–M5.6 | M    |
+| Stage | Name                                   | Depends on | Size | Status |
+| ----- | -------------------------------------- | ---------- | ---- | ------ |
+| M5.1  | Host skeleton and GET pipeline          | —          | M    | ✅     |
+| M5.2  | Structured errors and status mapping    | M5.1       | S    | ⏳     |
+| M5.3  | Typed parameters, source registry, schema | M5.1     | L    | ⏳     |
+| M5.4  | Query variables (GET)                   | M5.3       | M    | ⏳     |
+| M5.5  | POST endpoint and request contract      | M5.4       | S    | ⏳     |
+| M5.6  | Execution limits and cancellation       | M5.3       | M    | ⏳     |
+| M5.7  | Hardening, docs, and milestone close-out | M5.1–M5.6 | M    | ⏳     |
 
 ---
 

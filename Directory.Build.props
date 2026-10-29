@@ -2,14 +2,17 @@
 
   <!--
     Repository layout:
-      FunQuery.csproj          the library / demo host (stays at the repository root)
-      tests/FunQuery.Tests/    unit tests (in-memory only, no database required)
+      FunQuery.csproj          core language + in-memory interpreter
+      src/                     adapters (for example the ASP.NET Core host adapter)
+      hosts/                   runnable sample hosts
+      tests/                   test projects (in-memory only, no database required)
 
-    The root project globs **/*.cs, so tests/ must be excluded from it. Otherwise the
-    test sources would be compiled into FunQuery itself.
+    The root project globs **/*.cs, so every directory that belongs to another
+    project must be excluded. Otherwise those sources would be compiled into
+    FunQuery itself.
   -->
   <PropertyGroup>
-    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**;src/**;hosts/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <!-- Lexer and a few other pieces are internal; let the test project see them. -->

@@ -48,6 +48,9 @@ public enum QueryErrorCode
     MaxDepthExceeded,
     TooManyTokens,
 
+    // Integrasi HTTP
+    InvalidRequest,
+
     // Bug di FunQuery sendiri, bukan kesalahan input pengguna
     InternalError,
 }

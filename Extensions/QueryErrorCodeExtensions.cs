@@ -42,6 +42,8 @@ public static class QueryErrorCodeExtensions
         QueryErrorCode.MaxDepthExceeded => "MAX_DEPTH_EXCEEDED",
         QueryErrorCode.TooManyTokens => "TOO_MANY_TOKENS",
 
+        QueryErrorCode.InvalidRequest => "INVALID_REQUEST",
+
         _ => "INTERNAL_ERROR",
     };
 

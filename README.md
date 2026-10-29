@@ -169,3 +169,15 @@ $source([...]).$filter(...)
 running entirely in memory.
 
 Only after that vertical slice is stable will additional functions and external providers be added.
+
+### HTTP host (Milestone 5)
+
+Milestone 5 is in progress. The first stage, M5.1, adds a runnable ASP.NET Core host:
+
+```bash
+dotnet run --project hosts/FunQuery.Server
+curl "http://localhost:5000/query?q=%24source(%5B1%2C2%2C3%5D).%24count()"
+```
+
+Only `GET /query?q=...` is available at this stage. Sources, variables, POST, and the final error
+contract arrive in M5.2–M5.5. See [`docs/Milestone5.md`](docs/Milestone5.md).

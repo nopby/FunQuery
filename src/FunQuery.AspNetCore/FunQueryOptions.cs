@@ -1,0 +1,35 @@
+namespace FunQuery.AspNetCore;
+
+/// <summary>
+/// Konfigurasi adapter HTTP. Semua nilai punya default yang aman; ubah lewat
+/// <c>AddFunQuery(options =&gt; ...)</c> saat startup, bukan per request.
+/// </summary>
+public sealed class FunQueryOptions
+{
+    /// <summary>Path endpoint GET, default <c>/query</c>. Harus dimulai dengan '/'.</summary>
+    public string Route { get; set; } = "/query";
+
+    /// <summary>Nama query parameter yang berisi ekspresi FunQuery, default <c>q</c>.</summary>
+    public string QueryParameter { get; set; } = "q";
+
+    /// <summary>
+    /// Batas yang dipakai <see cref="QueryEngine"/> untuk setiap request. Default
+    /// <see cref="QueryLimits.Default"/> (input 2048 karakter, 1024 token, kedalaman 64).
+    /// </summary>
+    public QueryLimits Limits { get; set; } = QueryLimits.Default;
+
+    internal void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(Route) || !Route.StartsWith('/'))
+            throw new ArgumentException(
+                $"{nameof(Route)} must be a non-empty path starting with '/'.",
+                nameof(Route));
+
+        if (string.IsNullOrWhiteSpace(QueryParameter))
+            throw new ArgumentException(
+                $"{nameof(QueryParameter)} must not be empty.",
+                nameof(QueryParameter));
+
+        ArgumentNullException.ThrowIfNull(Limits, nameof(Limits));
+    }
+}

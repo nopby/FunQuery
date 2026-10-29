@@ -1,5 +1,12 @@
 <Solution>
+  <Folder Name="/hosts/">
+    <Project Path="hosts/FunQuery.Server/FunQuery.Server.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/FunQuery.AspNetCore/FunQuery.AspNetCore.csproj" />
+  </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/FunQuery.AspNetCore.Tests/FunQuery.AspNetCore.Tests.csproj" />
     <Project Path="tests/FunQuery.Tests/FunQuery.Tests.csproj" />
   </Folder>
   <Project Path="FunQuery.csproj" />
