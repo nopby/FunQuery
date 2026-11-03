@@ -58,9 +58,11 @@ $source(@source).$filter(id eq 'x')           -- TYPE_MISMATCH
 
 Field order in `Schema` is the field order of the result rows and of `$select({row: ~})`.
 
-Supported field types are the language types: `int`, `long`, `decimal`, `string`, `bool`, `date`,
-`array<T>`, and nested `object`. `any` and `unknown` accept any value and are intended for provider
-metadata, not for hand-written sources.
+Supported field types are the language types: `int`, `long`, `decimal`, `float`, `double`, `string`,
+`bool`, `date`, `array<T>`, and nested `object`. `float` and `double` have no literal: declare them only
+for approximate source columns, and note the `eq`/`neq`/`in` restriction in
+[`DataTypes.md`](DataTypes.md#floating-point). `any` and `unknown` accept any value and are intended for
+provider metadata, not for hand-written sources.
 
 ## Rows
 

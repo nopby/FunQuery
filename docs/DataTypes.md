@@ -7,29 +7,34 @@ Type names below are the names used in error messages (`Cannot compare string wi
 
 ## Overview
 
-| Type      | Literal                    | In-memory representation        | Status |
-| --------- | -------------------------- | ------------------------------- | ------ |
-| `int`     | `42`                       | `System.Int32`                  | v1     |
-| `long`    | `2147483648`               | `System.Int64`                  | v1     |
-| `decimal` | `1.5`                      | `System.Decimal`                | v1     |
-| `string`  | `'hello'`                  | `System.String`                 | v1     |
-| `bool`    | `true`, `false`            | `System.Boolean`                | v1     |
-| `date`    | `$date('2024-01-15')`      | `System.DateOnly`               | v1     |
-| `null`    | `null`                     | absence of a value              | v1     |
-| `array`   | `[1, 2, 3]`                | ordered list of one element type| v1     |
-| `object`  | `{id: 1, name: 'x'}`       | ordered set of named fields     | v1     |
+| Type      | Literal                    | In-memory representation         | Status        |
+| --------- | -------------------------- | -------------------------------- | ------------- |
+| `int`     | `42`                       | `System.Int32`                   | v1            |
+| `long`    | `2147483648`               | `System.Int64`                   | v1            |
+| `decimal` | `1.5`                      | `System.Decimal`                 | v1            |
+| `string`  | `'hello'`                  | `System.String`                  | v1            |
+| `bool`    | `true`, `false`            | `System.Boolean`                 | v1            |
+| `date`    | `$date('2024-01-15')`      | `System.DateOnly`                | v1            |
+| `null`    | `null`                     | absence of a value               | v1            |
+| `array`   | `[1, 2, 3]`                | ordered list of one element type | v1            |
+| `object`  | `{id: 1, name: 'x'}`       | ordered set of named fields      | v1            |
+| `float`   | —                          | `System.Single`                  | provider only |
+| `double`  | —                          | `System.Double`                  | provider only |
 
 These words are reserved: `true`, `false`, `null`, `not`, `in`, `contains`, `startswith`, `endswith`, and the
 operators `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `and`, `or`. They cannot be written as unquoted field names.
 They are case-sensitive: `TRUE` and `Null` are ordinary identifiers. A reserved word can still be a field
 name when it is written as a quoted key (see [Objects](#objects)).
 
-`float` and `double` are **not language types in v1**. See [Floating point](#floating-point).
+`float` and `double` have no literal: a query can only read them from a field declared by a source
+schema. See [Floating point](#floating-point).
 
 ## Numbers
 
-The language has three numeric types: `int`, `long`, and `decimal`. There is a single kind of numeric
-literal. Its type is decided by the semantic analyzer from the written value, never from a suffix.
+The language has three **exact** numeric types: `int`, `long`, and `decimal`. There is a single kind of
+numeric literal. Its type is decided by the semantic analyzer from the written value, never from a
+suffix. `float` and `double` are approximate and have no literal; see
+[Floating point](#floating-point).
 
 ### Literal syntax
 
@@ -74,31 +79,38 @@ The same widening applies inside an array or an object field: `[1, 1.5]` is `arr
 `{n: 1}` unified with `{n: 1.5}` gives a field of type `decimal`. Widening only ever happens within the
 same numeric family — `int`/`long`/`decimal` widen among themselves, and (separately) `float`/`double`
 widen among themselves — never across the two families, since mixing an exact and an approximate number
-silently would reintroduce the precision problem [floating point](#floating-point) exists to avoid.
+silently would reintroduce the precision problem that [floating point](#floating-point) exists to avoid.
+
+Comparison is wider than widening: a `float` or `double` can still be compared with an exact number by
+numeric value (the comparison is performed as `double`). That does not unify the two families; see
+[Floating point](#floating-point).
 
 ## Floating point
 
-`float` and `double` are not part of the v1 language:
+`float` and `double` are **approximate** numeric types. They are not part of the v1 literal syntax and
+cannot be written in a query:
 
 * no literal produces them;
-* a field can only have them when a provider schema declares them.
+* a query can only read them from a field whose source schema declares them.
 
-The language may still meet them when a data source or provider (for example an EF model) exposes columns of
-those types. The decision for that case is fixed now, so that no provider can expose a query surface with
-unreliable equality:
+How a source maps its native columns to these types is provider-specific; the [provider
+table](#provider-expectations) gives typical mappings. No bundled source declares them today, so the
+rules below matter when a host or provider does.
 
-> **`eq` and `neq` are rejected when either operand is `float` or `double`.**
-> `gt`, `gte`, `lt`, and `lte` are allowed.
+Because an approximate value cannot reliably test equality, the language forbids equality-based
+operators when either operand is approximate:
+
+> **`eq`, `neq`, and `in` are rejected when either operand is `float` or `double`.**
+> `gt`, `gte`, `lt`, and `lte` are allowed. `eq`/`neq` against the `null` literal are also allowed,
+> because they test for absence rather than compare two values.
 
 Reason: two floating point values that "should" be equal often differ in the last bits, and the same
 literal can be stored differently by an in-memory `double`, a LINQ provider, and a SQL `float` column. An
 equality test then gives different answers in different providers. A range comparison degrades gracefully.
 
-The error is `TYPE_MISMATCH` with a message that suggests a range comparison. This rule is enforced by the
-semantic analyzer and covered by tests. It applies equally to in-memory, LINQ, and SQL execution.
-
-How a provider maps its schema types to language types is decided when providers are introduced
-(Milestones 5 and 6). Until then `float` and `double` are not available in queries.
+The error is `TYPE_MISMATCH` with a message that suggests a range comparison. The rule is enforced by the
+semantic analyzer; the `eq`/`neq` form is covered by tests. It applies equally to in-memory, LINQ, and SQL
+execution.
 
 ## Strings
 
@@ -202,13 +214,16 @@ These types appear in the analyzer but cannot be written in a query.
 Two types can be compared when they are the same type, when both are numeric, or when one of them is `any`.
 Whether the comparison is then allowed depends on the operator (see [`Operators.md`](Operators.md)).
 
-| Left \ Right | int / long / decimal | string | bool | date | array / object |
-| ------------- | -------------------- | ------ | ---- | ---- | -------------- |
-| int / long / decimal | yes           | no     | no   | no   | no             |
-| string        | no                   | yes    | no   | no   | no             |
-| bool          | no                   | no     | yes  | no   | no             |
-| date          | no                   | no     | no   | yes  | no             |
-| array / object | no                  | no     | no   | no   | no             |
+| Left \ Right | any numeric | string | bool | date | array / object |
+| ------------- | ----------- | ------ | ---- | ---- | -------------- |
+| any numeric   | yes\*       | no     | no   | no   | no             |
+| string        | no          | yes    | no   | no   | no             |
+| bool          | no          | no     | yes  | no   | no             |
+| date          | no          | no     | no   | yes  | no             |
+| array / object | no         | no     | no   | no   | no             |
+
+\* Numeric comparisons work between any numeric types. `eq`, `neq`, and `in` have the additional
+`float`/`double` restriction described in [Floating point](#floating-point).
 
 There is no implicit conversion between a number and a string, between a number and a bool, or between a
 date and a string.
@@ -226,7 +241,8 @@ semantics above rather than the native semantics of the source.
 | `string`      | `nvarchar`, `varchar`, `text`        | ordinal, case-sensitive (see [Operators](Operators.md#strings)) |
 | `bool`        | `bit`, `boolean`                     |       |
 | `date`        | `date`                               | no time or time zone; see [Dates](#dates) |
-| not available | `float`, `real`, `double precision`  | see [Floating point](#floating-point) |
+| `float`       | `real`                               | approximate; no `eq`, `neq`, or `in` |
+| `double`      | `double precision`                   | approximate; no `eq`, `neq`, or `in` |
 
-The types of the source columns come from the source registry (Milestone 5). A literal is sent as a typed
-parameter whose type follows the column, never by casting the column.
+The types of the source columns come from the source schema (see [`Sources.md`](Sources.md)). A literal
+is sent as a typed parameter whose type follows the column, never by casting the column.

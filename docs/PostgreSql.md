@@ -70,13 +70,17 @@ and seed, see [`Development.md`](Development.md).
 | `int` | `integer` | |
 | `long` | `bigint` | |
 | `decimal` | `numeric` | exact; no binary floating point |
+| `float` | `real` | approximate; no `eq`, `neq`, or `in` |
+| `double` | `double precision` | approximate; no `eq`, `neq`, or `in` |
 | `string` | `text` | comparisons use `COLLATE "C"` |
 | `bool` | `boolean` | |
 | `date` | `date` | no time or time zone |
 | `array<T>` | `jsonb` or `T[]` | not supported in predicates or nested projections in v1 |
 | `object` | `jsonb` | scalar object projections are supported; nested objects are not |
 
-A nullable column maps to a nullable FunQuery field. A missing result column reads as `null`.
+A nullable column maps to a nullable FunQuery field. A missing result column reads as `null`. The sample
+`orders` source uses only the exact types; a host may expose `real` or `double precision` columns as
+`float` or `double` if its queries need approximate values.
 
 ## Query examples
 
