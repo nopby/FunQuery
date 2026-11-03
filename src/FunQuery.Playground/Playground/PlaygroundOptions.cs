@@ -1,4 +1,4 @@
-namespace FunQuery.Server.Playground;
+namespace FunQuery.Playground;
 
 /// <summary>
 /// Konfigurasi playground milik host contoh. Playground adalah alat developer, jadi host produksi

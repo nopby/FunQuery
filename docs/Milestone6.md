@@ -40,8 +40,8 @@ one starts.
 
 ### Work
 
-* `hosts/FunQuery.Server/wwwroot/playground/`: self-contained HTML, CSS, and JS. No CDN, no inline
-  scripts or styles.
+* `src/FunQuery.Playground/wwwroot/playground/`: self-contained HTML, CSS, and JS shared by both sample
+  hosts. No CDN, no inline scripts or styles.
 * Query editor, source input with a datalist, variables JSON editor, examples, history in
   `localStorage`, `Ctrl`+`Enter` to run.
 * Uses `POST /query`, so long queries and typed variables work exactly as in the API.

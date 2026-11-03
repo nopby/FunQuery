@@ -106,7 +106,9 @@ curl "http://localhost:5000/query?source=orders&q=%24source(%40source).%24filter
 curl "http://localhost:5000/query?source=people&q=%24source(%40source).%24filter(active).%24count()"
 ```
 
-`orders` is the PostgreSQL source; `people` is in-memory in the same host.
+`orders` is the PostgreSQL source; `people` is in-memory in the same host. Both sample hosts serve the
+playground at <http://localhost:5000/playground/>, so this host can run PostgreSQL queries from the
+browser.
 
 ### 6. Run the tests
 

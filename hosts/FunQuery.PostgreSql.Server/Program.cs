@@ -1,7 +1,9 @@
 using FunQuery.AspNetCore;
+using FunQuery.Playground;
 using FunQuery.PostgreSql;
 using FunQuery.PostgreSql.Server.Sources;
 using FunQuery.SemanticTypes;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -40,13 +42,48 @@ builder.Services.AddFunQuerySources(sources => sources
     .Add(new PostgreSqlSource("orders", ordersSchema, "orders", dataSource)
         .AsQuerySource("orders", ordersSchema)));
 
+var playground = new PlaygroundOptions
+{
+    Enabled = ReadBool(builder.Configuration["Playground:Enabled"], defaultValue: true),
+    ExposeSourceNames = ReadBool(
+        builder.Configuration["Playground:ExposeSourceNames"],
+        defaultValue: true),
+    SourceNames = ["orders", "people"],
+    Examples =
+    [
+        .. PlaygroundExamples.Create(),
+        new(
+            "PostgreSQL: orders by date",
+            "$source(@source).$filter(ordered_on gt $date('2024-02-01'))" +
+            ".$select(id, customer, ordered_on)",
+            "orders",
+            null),
+    ],
+};
+
+builder.Services.AddSingleton(playground);
+
 var app = builder.Build();
+
+var playgroundOptions = app.Services.GetRequiredService<PlaygroundOptions>();
+
+if (playgroundOptions.Enabled)
+{
+    app.UsePlaygroundSecurityHeaders();
+    app.UsePlaygroundRedirect();
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+    app.MapFunQueryPlayground(playgroundOptions);
+}
 
 app.UseFunQueryApiDocsSecurityHeaders();
 
 app.MapFunQueryEndpoints();
 
 app.Run();
+
+static bool ReadBool(string? value, bool defaultValue) =>
+    bool.TryParse(value, out var parsed) ? parsed : defaultValue;
 
 /// <summary>Public agar integration test dapat memakai WebApplicationFactory&lt;Program&gt;.</summary>
 public partial class Program

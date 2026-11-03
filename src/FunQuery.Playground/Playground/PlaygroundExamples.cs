@@ -1,6 +1,7 @@
-namespace FunQuery.Server.Playground;
+namespace FunQuery.Playground;
 
-internal static class PlaygroundExamples
+/// <summary>Contoh query yang tersedia di semua host yang memasang playground.</summary>
+public static class PlaygroundExamples
 {
     public static PlaygroundExample[] Create() =>
     [
@@ -40,13 +41,6 @@ internal static class PlaygroundExamples
             "People: active",
             "$source(@source).$filter(active).$select(id, name, nickname)",
             "people",
-            null),
-
-        new(
-            "Orders: recent dates",
-            "$source(@source).$filter(orderedOn gt $date('2024-02-01'))" +
-            ".$select(id, customer, orderedOn)",
-            "orders",
             null),
     ];
 }

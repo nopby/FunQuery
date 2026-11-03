@@ -124,8 +124,7 @@ Not supported:
 * multiple documents, API versioning, or remote OpenAPI document sources;
 * a formal OpenAPI parameter for dynamic `v.<name>` variables;
 * Swagger UI (Scalar is the chosen UI);
-* guaranteed client SDK generation; Scalar's SDK controls are outside the FunQuery contract;
-* the playground in the PostgreSQL host (it lives in the in-memory sample host).
+* guaranteed client SDK generation; Scalar's SDK controls are outside the FunQuery contract.
 
 The document is maintained as a static builder in the adapter. Adding a new HTTP endpoint requires
 updating `FunQueryOpenApiDocument`; it is not inferred from endpoint metadata.

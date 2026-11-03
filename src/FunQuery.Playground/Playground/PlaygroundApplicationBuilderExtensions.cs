@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 
-namespace FunQuery.Server.Playground;
+namespace FunQuery.Playground;
 
 public static class PlaygroundApplicationBuilderExtensions
 {

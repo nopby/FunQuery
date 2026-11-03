@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/FunQuery.AspNetCore/FunQuery.AspNetCore.csproj" />
+    <ProjectReference Include="../../src/FunQuery.Playground/FunQuery.Playground.csproj" />
   </ItemGroup>
 
 </Project>

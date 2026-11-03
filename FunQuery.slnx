@@ -5,6 +5,7 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/FunQuery.AspNetCore/FunQuery.AspNetCore.csproj" />
+    <Project Path="src/FunQuery.Playground/FunQuery.Playground.csproj" />
     <Project Path="src/FunQuery.PostgreSql/FunQuery.PostgreSql.csproj" />
     <Project Path="src/FunQuery.Sql/FunQuery.Sql.csproj" />
   </Folder>

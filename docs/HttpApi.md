@@ -268,7 +268,7 @@ features.
 
 ## Playground
 
-The sample host serves a developer playground at `/playground/` when `Playground:Enabled` is true (the
+The sample hosts serve a developer playground at `/playground/` when `Playground:Enabled` is true (the
 sample `appsettings.json` enables it). It is a static page that calls `POST /query`:
 
 * query editor, source input with a datalist, variables JSON editor;

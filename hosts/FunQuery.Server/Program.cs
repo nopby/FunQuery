@@ -1,5 +1,5 @@
 using FunQuery.AspNetCore;
-using FunQuery.Server.Playground;
+using FunQuery.Playground;
 using FunQuery.Server.Sources;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -29,7 +29,16 @@ var playground = new PlaygroundOptions
         builder.Configuration["Playground:ExposeSourceNames"],
         defaultValue: true),
     SourceNames = [orders.Name, people.Name],
-    Examples = PlaygroundExamples.Create(),
+    Examples =
+    [
+        .. PlaygroundExamples.Create(),
+        new(
+            "Orders: recent dates",
+            "$source(@source).$filter(orderedOn gt $date('2024-02-01'))" +
+            ".$select(id, customer, orderedOn)",
+            orders.Name,
+            null),
+    ],
 };
 
 builder.Services.AddSingleton(playground);

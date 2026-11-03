@@ -1,5 +1,5 @@
 using System.Net;
-using FunQuery.Server.Playground;
+using FunQuery.Playground;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 
