@@ -311,6 +311,21 @@ public sealed class PostgreSqlIntegrationTests : IAsyncLifetime
             "$source(@source).$distinct(nickname).$count()");
     }
 
+    [Fact]
+    public async Task ParityResultSetLet()
+    {
+        if (_dataSource is null) return;
+
+        await AssertParityAsync(
+            "$let(@items, $source(@source).$filter(total gt 5).$select(id, customer))" +
+            ".$source(@items).$filter(customer contains 'a').$select(id)");
+
+        await AssertParityAsync(
+            "$let(@min, 5)" +
+            ".$let(@items, $source(@source).$filter(total gt @min).$select(id, total))" +
+            ".$source(@items).$count()");
+    }
+
     private async Task AssertParityAsync(
         string query,
         params (string Name, SemanticType Type, object? Value)[] variables)

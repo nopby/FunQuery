@@ -10,6 +10,20 @@ public abstract record RelationalPlan;
 /// <summary>Source terdaftar; nama dan schema datang dari host.</summary>
 public sealed record Scan(string SourceName, ObjectType Schema) : RelationalPlan;
 
+/// <summary>Definisi CTE dari binding <c>$let</c> yang berisi result set.</summary>
+public sealed record CteDefinition(
+    string SqlName,
+    ObjectType Schema,
+    RelationalPlan Plan);
+
+/// <summary>Query dengan satu atau lebih CTE. CTE ditulis berurutan sebelum body.</summary>
+public sealed record With(
+    IReadOnlyList<CteDefinition> Ctes,
+    RelationalPlan Body) : RelationalPlan;
+
+/// <summary>Membaca CTE yang dideklarasikan di scope query yang sama.</summary>
+public sealed record CteScan(string SqlName, ObjectType Schema) : RelationalPlan;
+
 /// <summary>Array inline dari query; SQL provider boleh menolaknya lewat capability.</summary>
 public sealed record Values(
     IReadOnlyList<PlanExpression> Rows,

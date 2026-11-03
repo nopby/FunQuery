@@ -190,6 +190,67 @@ public class PlanBuilderTests
     }
 
     [Fact]
+    public void LetResultSetBecomesAWithAndCteScan()
+    {
+        var environment = SourceEnvironment(OrderSchema);
+
+        var plan = Build(
+            "$let(@recent, $source(@source).$filter(id gt 1).$select(id, customer))" +
+            ".$source(@recent).$select(id)",
+            environment,
+            Sources(OrderSchema));
+
+        var with = Assert.IsType<With>(plan);
+        var cte = Assert.Single(with.Ctes);
+
+        Assert.Equal("fq_recent", cte.SqlName);
+        Assert.IsType<Project>(cte.Plan);
+
+        var project = Assert.IsType<Project>(with.Body);
+        var scan = Assert.IsType<CteScan>(project.Input);
+
+        Assert.Equal("fq_recent", scan.SqlName);
+    }
+
+    [Fact]
+    public void LetResultSetCanFeedAggregation()
+    {
+        var environment = SourceEnvironment(OrderSchema);
+
+        var plan = Build(
+            "$let(@recent, $source(@source).$filter(id gt 1).$select(id))" +
+            ".$source(@recent).$filter(id lt 3).$count()",
+            environment,
+            Sources(OrderSchema));
+
+        var with = Assert.IsType<With>(plan);
+        Assert.Single(with.Ctes);
+        Assert.IsType<Aggregate>(with.Body);
+    }
+
+    [Fact]
+    public void MultipleResultSetsAreDeclaredInOrder()
+    {
+        var environment = SourceEnvironment(OrderSchema);
+
+        var plan = Build(
+            "$let(@a, $source(@source).$filter(id gt 1).$select(id))" +
+            ".$let(@b, $source(@a).$filter(id lt 4).$select(id))" +
+            ".$source(@b).$count()",
+            environment,
+            Sources(OrderSchema));
+
+        var with = Assert.IsType<With>(plan);
+
+        Assert.Equal(
+            ["fq_a", "fq_b"],
+            with.Ctes.Select(cte => cte.SqlName).ToArray());
+
+        Assert.IsType<CteScan>(
+            Assert.IsType<Aggregate>(with.Body).Input);
+    }
+
+    [Fact]
     public void RequestVariablesBecomeParameters()
     {
         var environment = QueryEnvironment.From(

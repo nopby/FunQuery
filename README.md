@@ -240,9 +240,10 @@ The sample expects an `orders` table with `id integer`, `customer text`, `total 
 dotnet publish hosts/FunQuery.PostgreSql.Server -c Release -r win-x64
 ```
 
-M6.3–M6.6 are implemented; Milestone 6 is complete for PostgreSQL. Other SQL dialects remain future
-work. See [`docs/PostgreSql.md`](docs/PostgreSql.md) for registration, the supported subset, and the
-limitations matrix.
+M6.3–M6.6 are implemented; Milestone 6 is complete for PostgreSQL. A result-set `$let` is rendered as
+a PostgreSQL CTE. Other SQL dialects remain future work. See
+[`docs/PostgreSql.md`](docs/PostgreSql.md) for registration, the supported subset, and the limitations
+matrix, and [`docs/CtePlan.md`](docs/CtePlan.md) for the CTE implementation plan and result.
 
 See [`docs/Milestone6.md`](docs/Milestone6.md) for the staged plan,
 [`docs/HttpApi.md`](docs/HttpApi.md) for the GET/POST endpoints, variables, limits, security, and error

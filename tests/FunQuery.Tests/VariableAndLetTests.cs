@@ -273,6 +273,16 @@ public class VariableAndLetTests
             Run("$let(@items, [{id: 1}, {id: 2}]).$source(@items)"));
     }
 
+    [Fact]
+    public void SourceOfAVariable_CanHoldTheResultOfASubChain()
+    {
+        Assert.Equal(
+            """[{"id":2},{"id":3}]""",
+            Run("$let(@items, $source([{id: 1}, {id: 2}, {id: 3}]).$filter(id gt 1))" +
+                ".$source(@items)" +
+                ".$select(id)"));
+    }
+
     // $select does not exist yet, so a bound value cannot be read back directly. Instead,
     // each case proves the value round-tripped correctly by comparing it with the same
     // literal parsed independently: if @x really holds that value, "@x eq <literal>" is true.

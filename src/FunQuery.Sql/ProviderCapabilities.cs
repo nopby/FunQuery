@@ -24,9 +24,10 @@ public enum ProviderCapabilities
     WindowFunctions = 1 << 9,
     JsonProjection = 1 << 10,
     InlineSources = 1 << 11,
+    Cte = 1 << 12,
 
     All = Filtering | Sorting | Projection | Pagination |
           StringOperations | DateOperations | Aggregation |
           Distinct | DistinctOn | WindowFunctions |
-          JsonProjection | InlineSources,
+          JsonProjection | InlineSources | Cte,
 }

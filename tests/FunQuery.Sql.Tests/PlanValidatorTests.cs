@@ -152,4 +152,32 @@ public class PlanValidatorTests
             plan,
             ProviderCapabilities.All & ~ProviderCapabilities.JsonProjection);
     }
+
+    [Fact]
+    public void CteIsRejectedWithoutTheCteCapability()
+    {
+        var schema = new ObjectType(
+            new Dictionary<string, SemanticType>(StringComparer.Ordinal)
+            {
+                ["id"] = SemanticTypeOptions.Int,
+            });
+
+        var environment = QueryEnvironment.From(
+            "source",
+            new QueryParameter(new ArrayType(schema), null));
+
+        var sources = new Dictionary<string, PlanSource>(StringComparer.Ordinal)
+        {
+            ["source"] = new PlanSource("orders", schema),
+        };
+
+        var plan = Build(
+            "$let(@items, $source(@source).$select(id)).$source(@items).$count()",
+            environment,
+            sources);
+
+        AssertRejected(
+            plan,
+            ProviderCapabilities.All & ~ProviderCapabilities.Cte);
+    }
 }

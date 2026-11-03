@@ -119,6 +119,46 @@ $let(@items, [{id: 1}, {id: 2}])
   overload to accept externally supplied variables once that milestone defines how their literal text is
   parsed and validated.
 
+### Result sets and CTEs
+
+The value may be a full sub-chain, not only a literal array:
+
+```
+$let(@recent,
+    $source(@source)
+        .$filter(ordered_on gt $date('2024-01-01'))
+        .$select(id, customer, total))
+    .$source(@recent)
+    .$filter(total gt 100)
+    .$select(id, customer)
+```
+
+The value is still evaluated once. The in-memory provider materializes it; the PostgreSQL provider renders
+an object result set as a CTE:
+
+```sql
+WITH "fq_recent" AS (
+    SELECT "id", "customer", "total"
+    FROM "orders"
+    WHERE "ordered_on" > @p0
+)
+SELECT "id", "customer"
+FROM "fq_recent"
+WHERE "total" > @p1
+```
+
+* Only an `array<object>` result set can become a CTE in v1. A scalar array such as
+  `$let(@n, [1, 2])` remains usable in memory but is `NOT_SUPPORTED` by the SQL provider.
+* The result-set value must be a function chain. Inline arrays are `NOT_SUPPORTED` for CTEs; start with
+  `$source(@source)` or another result-set variable.
+* A CTE may use earlier scalar variables as parameters and earlier result-set variables as CTEs.
+* The CTE name is derived from the variable name (`@recent` becomes `fq_recent`) and is quoted by the
+  dialect; it is not part of the query surface and cannot be chosen by the user.
+* A provider that does not declare the CTE capability rejects the plan with `NOT_SUPPORTED` before
+  touching the database.
+* Recursive CTEs, temp tables, and cross-request persistence are out of scope. See
+  [`CtePlan.md`](CtePlan.md).
+
 ## Error reference
 
 | Situation | Code |

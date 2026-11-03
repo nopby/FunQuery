@@ -106,6 +106,26 @@ public sealed class PostgreSqlHttpTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GetAndPostSupportResultSetLet()
+    {
+        if (_client is null) return;
+
+        const string query =
+            "$let(@recent, $source(@source).$filter(total gt 100).$select(id, customer))" +
+            ".$source(@recent).$filter(customer contains 'i').$select(id)";
+
+        var get = await _client.GetAsync(Url(query, "orders"));
+        var post = await _client.PostAsync("/query", Json(Body(query, "orders")));
+
+        const string expected = "[{\"id\":3}]";
+
+        Assert.Equal(HttpStatusCode.OK, get.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, post.StatusCode);
+        Assert.Equal(expected, await get.Content.ReadAsStringAsync());
+        Assert.Equal(expected, await post.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task InMemorySourcesStillWorkInTheSameHost()
     {
         if (_client is null) return;

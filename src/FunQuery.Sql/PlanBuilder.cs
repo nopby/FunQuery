@@ -15,8 +15,9 @@ public sealed class PlanBuilder
     private readonly ReadOnlyMemory<char> _source;
     private readonly IReadOnlyDictionary<string, PlanSource> _sources;
     private readonly QueryEnvironment _environment;
-    private Dictionary<string, PlanExpression> _variables =
+    private Dictionary<string, PlanBinding> _bindings =
         new(StringComparer.Ordinal);
+    private List<CteDefinition> _ctes = [];
 
     public PlanBuilder(
         string query,
@@ -68,12 +69,25 @@ public sealed class PlanBuilder
 
         calls.Reverse();
 
-        RelationalPlan? plan = null;
+        var outerCtes = _ctes;
+        _ctes = [];
 
-        foreach (var call in calls)
-            plan = Apply(call, plan);
+        try
+        {
+            RelationalPlan? plan = null;
 
-        return plan;
+            foreach (var call in calls)
+                plan = Apply(call, plan);
+
+            if (plan is null || _ctes.Count == 0)
+                return plan;
+
+            return new With(_ctes.ToArray(), plan);
+        }
+        finally
+        {
+            _ctes = outerCtes;
+        }
     }
 
     private RelationalPlan? Apply(CallExpression call, RelationalPlan? input)
@@ -136,8 +150,49 @@ public sealed class PlanBuilder
                 "$let must have a variable and a value. Was the query analyzed?");
         }
 
-        _variables[VariableName(variable)] = BuildExpression(call.Arguments[1]);
+        var name = VariableName(variable);
+        var value = call.Arguments[1];
+
+        if (value.SemanticType is ArrayType { Type: ObjectType schema })
+        {
+            RelationalPlan plan;
+
+            // A value has its own detached scope: bindings declared inside it must not leak
+            // into the chain that follows the outer $let.
+            using (EnterScope())
+                plan = BuildRelational(value);
+
+            var sqlName = CteName(name);
+            _bindings[name] = new RelationalBinding(sqlName, schema);
+            _ctes.Add(new CteDefinition(sqlName, schema, plan));
+            return input;
+        }
+
+        if (value.SemanticType is ArrayType)
+        {
+            throw new QueryException(
+                QueryErrorCode.NotSupported,
+                $"The SQL provider cannot bind '@{name}' as a CTE: " +
+                "the result set must contain objects with named fields.");
+        }
+
+        _bindings[name] = new ScalarBinding(BuildExpression(value));
         return input;
+    }
+
+    private RelationalPlan BuildRelational(BaseExpression value)
+    {
+        if (value is not CallExpression)
+        {
+            throw new QueryException(
+                QueryErrorCode.NotSupported,
+                "A $let result set must be a function chain in the SQL provider.");
+        }
+
+        return BuildChain(value)
+            ?? throw new QueryException(
+                QueryErrorCode.NotSupported,
+                "A $let result set must start with a data source.");
     }
 
     private RelationalPlan ApplySource(CallExpression call, RelationalPlan? input)
@@ -170,10 +225,20 @@ public sealed class PlanBuilder
         if (_sources.TryGetValue(name, out var source))
             return new Scan(source.Name, source.Schema);
 
+        if (_bindings.TryGetValue(name, out var binding))
+        {
+            if (binding is RelationalBinding relational)
+                return new CteScan(relational.SqlName, relational.Schema);
+
+            throw new QueryException(
+                QueryErrorCode.NotSupported,
+                $"Variable '@{name}' is not a result set.");
+        }
+
         throw new QueryException(
             QueryErrorCode.NotSupported,
             $"Source variable '@{name}' is not registered; " +
-            "only registered sources can be planned.");
+            "only registered sources and $let result sets can be planned.");
     }
 
     private Project ApplyMap(CallExpression call, RelationalPlan input)
@@ -419,8 +484,15 @@ public sealed class PlanBuilder
     {
         var name = VariableName(variable);
 
-        if (_variables.TryGetValue(name, out var bound))
-            return bound;
+        if (_bindings.TryGetValue(name, out var bound))
+        {
+            if (bound is ScalarBinding scalar)
+                return scalar.Expression;
+
+            throw new QueryException(
+                QueryErrorCode.NotSupported,
+                $"Result-set variable '@{name}' cannot be used as a scalar value.");
+        }
 
         if (_environment.Parameters.TryGetValue(name, out var parameter))
             return new Parameter(name, parameter.Type);
@@ -434,8 +506,15 @@ public sealed class PlanBuilder
     {
         var name = VariableName(variable);
 
-        if (_variables.TryGetValue(name, out var bound))
-            return ResolveString(bound);
+        if (_bindings.TryGetValue(name, out var bound))
+        {
+            if (bound is ScalarBinding scalar)
+                return ResolveString(scalar.Expression);
+
+            throw new QueryException(
+                QueryErrorCode.NotSupported,
+                $"Result-set variable '@{name}' cannot be used as a field name.");
+        }
 
         throw new QueryException(
             QueryErrorCode.NotSupported,
@@ -475,6 +554,9 @@ public sealed class PlanBuilder
     private string VariableName(VariableExpression variable) =>
         Text(variable.Token)[1..];
 
+    private static string CteName(string variableName) =>
+        "fq_" + variableName;
+
     private string Key(Token token) =>
         token.Type == TokenType.StringLiteral
             ? LiteralValues.Unquote(Text(token))
@@ -485,8 +567,8 @@ public sealed class PlanBuilder
 
     private IDisposable EnterScope()
     {
-        var snapshot = new Dictionary<string, PlanExpression>(
-            _variables,
+        var snapshot = new Dictionary<string, PlanBinding>(
+            _bindings,
             StringComparer.Ordinal);
 
         return new ScopeGuard(this, snapshot);
@@ -494,8 +576,16 @@ public sealed class PlanBuilder
 
     private sealed class ScopeGuard(
         PlanBuilder builder,
-        Dictionary<string, PlanExpression> snapshot) : IDisposable
+        Dictionary<string, PlanBinding> snapshot) : IDisposable
     {
-        public void Dispose() => builder._variables = snapshot;
+        public void Dispose() => builder._bindings = snapshot;
     }
+
+    private abstract record PlanBinding;
+
+    private sealed record ScalarBinding(PlanExpression Expression) : PlanBinding;
+
+    private sealed record RelationalBinding(
+        string SqlName,
+        ObjectType Schema) : PlanBinding;
 }

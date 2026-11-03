@@ -101,6 +101,35 @@ public class SqlRendererTests
     }
 
     [Fact]
+    public void LetResultSetRendersAsACte()
+    {
+        AssertSql(
+            "$let(@recent, $source(@source).$filter(id gt 1).$select(id, customer))" +
+            ".$source(@recent).$select(id)",
+            "WITH \"fq_recent\" AS (" +
+            "SELECT \"id\", \"customer\" FROM \"orders\" " +
+            "WHERE COALESCE((\"id\" > @p0), FALSE)" +
+            ") SELECT \"id\" FROM \"fq_recent\"",
+            ("@p0", 1));
+    }
+
+    [Fact]
+    public void ParametersInsideAndOutsideACteKeepTheirOrder()
+    {
+        AssertSql(
+            "$let(@min, 5)" +
+            ".$let(@items, $source(@source).$filter(total gt @min).$select(id, total))" +
+            ".$source(@items).$filter(id lt 4).$select(id)",
+            "WITH \"fq_items\" AS (" +
+            "SELECT \"id\", \"total\" FROM \"orders\" " +
+            "WHERE COALESCE((\"total\" > @p0), FALSE)" +
+            ") SELECT \"id\" FROM \"fq_items\" " +
+            "WHERE COALESCE((\"id\" < @p1), FALSE)",
+            ("@p0", 5),
+            ("@p1", 4));
+    }
+
+    [Fact]
     public void ProjectionReplacesTheSelectList()
     {
         AssertSql(

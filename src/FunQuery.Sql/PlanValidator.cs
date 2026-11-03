@@ -28,6 +28,19 @@ public static class PlanValidator
             case Scan:
                 return;
 
+            case CteScan:
+                Require(capabilities, ProviderCapabilities.Cte, "common table expressions");
+                return;
+
+            case With with:
+                Require(capabilities, ProviderCapabilities.Cte, "common table expressions");
+
+                foreach (var cte in with.Ctes)
+                    VisitPlan(cte.Plan, capabilities);
+
+                VisitPlan(with.Body, capabilities);
+                return;
+
             case Values values:
                 Require(capabilities, ProviderCapabilities.InlineSources, "inline sources");
                 foreach (var row in values.Rows)

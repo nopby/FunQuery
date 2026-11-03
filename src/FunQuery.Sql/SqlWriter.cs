@@ -21,6 +21,13 @@ public sealed class SqlWriter
 
         var builder = new StringBuilder();
 
+        if (query.Ctes.Count > 0)
+        {
+            builder.Append("WITH ");
+            builder.Append(string.Join(", ", query.Ctes.Select(WriteCte)));
+            builder.Append(' ');
+        }
+
         builder.Append("SELECT ");
 
         if (query.DistinctOn.Count > 0)
@@ -100,10 +107,14 @@ public sealed class SqlWriter
             : $"{expression} AS {_dialect.QuoteIdentifier(projection.Alias)}";
     }
 
+    private string WriteCte(SqlCte cte) =>
+        $"{_dialect.QuoteIdentifier(cte.Name)} AS ({Write(cte.Query)})";
+
     private string WriteSource(SqlSource source) =>
         source switch
         {
             SqlTableSource table => QuotePath(table.Table),
+            SqlCteSource cte => _dialect.QuoteIdentifier(cte.Name),
             SqlSubquerySource subquery =>
                 $"({Write(subquery.Query)}) AS {_dialect.QuoteIdentifier(subquery.Alias)}",
             _ => throw new QueryException(

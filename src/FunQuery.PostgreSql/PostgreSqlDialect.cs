@@ -22,7 +22,8 @@ public sealed class PostgreSqlDialect : ISqlDialect
         ProviderCapabilities.Aggregation |
         ProviderCapabilities.Distinct |
         ProviderCapabilities.DistinctOn |
-        ProviderCapabilities.WindowFunctions;
+        ProviderCapabilities.WindowFunctions |
+        ProviderCapabilities.Cte;
 
     public string QuoteIdentifier(string identifier) =>
         "\"" + identifier.Replace("\"", "\"\"") + "\"";

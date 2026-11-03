@@ -56,6 +56,8 @@ public sealed class SqlRenderer
         plan switch
         {
             Scan scan => BuildScan(scan),
+            CteScan cte => BuildCteScan(cte),
+            With with => ApplyWith(with),
             Values => throw NotSupported("Inline sources are not supported by this provider."),
             Filter filter => ApplyFilter(filter),
             Project project => ApplyProject(project),
@@ -89,6 +91,35 @@ public sealed class SqlRenderer
             null,
             Distinct: false,
             DistinctOn: []);
+    }
+
+    private SqlQuery BuildCteScan(CteScan scan) =>
+        new(
+            [new SqlProjection(SqlStar.Instance, null)],
+            new SqlCteSource(scan.SqlName),
+            null,
+            [],
+            null,
+            null,
+            Distinct: false,
+            DistinctOn: []);
+
+    private SqlQuery ApplyWith(With with)
+    {
+        var ctes = new SqlCte[with.Ctes.Count];
+
+        for (int i = 0; i < ctes.Length; i++)
+        {
+            var cte = with.Ctes[i];
+            ctes[i] = new SqlCte(cte.SqlName, BuildPlan(cte.Plan));
+        }
+
+        var body = BuildPlan(with.Body);
+
+        return body with
+        {
+            Ctes = [.. ctes, .. body.Ctes],
+        };
     }
 
     private SqlQuery ApplyFilter(Filter filter)

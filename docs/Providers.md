@@ -65,7 +65,7 @@ Rules:
 
 | Concern | Where |
 | ------- | ----- |
-| Plan IR (`Scan`, `Filter`, `Project`, `Sort`, `Take`, `Skip`, `Distinct`, `Aggregate`, `Any`, `First`) | core |
+| Plan IR (`Scan`, `CteScan`, `With`, `Filter`, `Project`, `Sort`, `Take`, `Skip`, `Distinct`, `Aggregate`, `Any`, `First`) | core |
 | SQL AST and renderer | core SQL provider |
 | Typed parameters and parameter names | renderer + dialect |
 | Two-valued null rewriting | renderer |
@@ -123,7 +123,9 @@ It does **not** need a new parser, analyzer, plan builder, or result model.
   sources only.
 * **`$field(@variable)`:** the variable must resolve to a known schema field at plan time. A dynamic
   identifier is rejected; identifiers are never taken from raw user text.
-* **`$let`:** resolved at plan time; the value becomes a typed parameter or constant.
+* **`$let`:** scalar values resolve at plan time to a typed parameter or constant. An `array<object>`
+  result-set value becomes a CTE (`WITH ...`) when the provider declares the `Cte` capability; scalar
+  arrays and inline-array bodies are rejected by the SQL provider in v1.
 
 ### Known PostgreSQL limitations (declared as capabilities)
 

@@ -1,6 +1,6 @@
 # CTE Support for `$let` — Work Plan
 
-**Status:** 📝 Proposed. Not implemented.
+**Status:** ✅ Complete.
 
 **Goal:** let a `$let` binding hold a **result set**, and let the PostgreSQL provider render that
 binding as a CTE so `$source(@name)` can read it. The language gains no new function: `$let` remains the
@@ -151,11 +151,11 @@ If the CTE body has a scalar projection (no object key), it is not a valid v1 CT
 
 | Stage | Name | Depends on | Size | Status |
 | ----- | ---- | ---------- | ---- | ------ |
-| C1 | Semantics and in-memory regression tests | — | S | ⏳ |
-| C2 | Plan IR and `PlanBuilder` bindings | C1 | M | ⏳ |
-| C3 | SQL AST, renderer, validator, capability | C2 | M | ⏳ |
-| C4 | PostgreSQL and HTTP integration tests | C3 | S | ⏳ |
-| C5 | Documentation, AOT smoke, close-out | C1–C4 | S | ⏳ |
+| C1 | Semantics and in-memory regression tests | — | S | ✅ |
+| C2 | Plan IR and `PlanBuilder` bindings | C1 | M | ✅ |
+| C3 | SQL AST, renderer, validator, capability | C2 | M | ✅ |
+| C4 | PostgreSQL and HTTP integration tests | C3 | S | ✅ |
+| C5 | Documentation, AOT smoke, close-out | C1–C4 | S | ✅ |
 
 ### C1 — Semantics and in-memory regression tests
 
@@ -247,3 +247,19 @@ Required cases:
    builder should not need a fallback that silently changes meaning.
 6. **Scalar arrays.** Supporting `array<int>` CTEs would require a single synthetic column and a
    follow-up language decision; keep them out of v1.
+
+## Result
+
+Implemented as planned:
+
+* `$let` now records either a scalar binding or a relational binding. An `array<object>` value becomes a
+  `CteDefinition` and `$source(@name)` becomes a `CteScan`.
+* The SQL layer has `With`, `CteDefinition`, `CteScan`, `SqlCte`, `SqlCteSource`, and the `Cte`
+  capability. PostgreSQL renders a quoted `WITH "fq_<name>" AS (...)` block.
+* Scalar `$let` behavior is unchanged. Scalar arrays and inline-array CTE bodies return `NOT_SUPPORTED`.
+* `docs/Variables.md`, `PostgreSql.md`, and `Providers.md` document the feature and its limits.
+* New tests cover plan shape, golden SQL, parameter order inside and outside the CTE, capability
+  rejection, in-memory behavior, live in-memory/PostgreSQL parity, and GET/POST HTTP. The full suite is
+  **1170 tests**.
+* Native AOT publish of the PostgreSQL host succeeded; the published binary served `/playground/` and a
+  result-set `$let` query returned the expected rows.

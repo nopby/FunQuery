@@ -130,7 +130,10 @@ curl -X POST http://localhost:5000/query \
 | `contains`, `startswith`, `endswith` | supported |
 | `$field('name')`, `$field(@letLiteral)` | supported |
 | `$field(@requestParameter)` | `NOT_SUPPORTED` (dynamic identifier) |
-| `$let` and request variables | supported |
+| `$let` scalar values and request variables | supported |
+| `$let` result set (`array<object>`) and `$source(@letResultSet)` | supported via `WITH` / CTE |
+| `$let` result set with scalar elements | `NOT_SUPPORTED` |
+| `$let` result set from an inline array | `NOT_SUPPORTED` |
 | Writes, DDL, transactions | not exposed |
 
 ## Null semantics
@@ -155,7 +158,8 @@ computed in a derived table, because PostgreSQL does not allow window functions 
 ## Parameters and security
 
 * Every user value is a typed `NpgsqlParameter`; no value is concatenated into SQL.
-* Identifiers come from the registered schema and are quoted by the dialect.
+* Identifiers come from the registered schema and are quoted by the dialect. CTE names are derived from
+  `$let` variable names with the `fq_` prefix and are always quoted.
 * Dynamic `$field(@requestParameter)` is rejected; use a literal or `$let`.
 * Connection/command failures become a generic `500 INTERNAL_ERROR`; details go to the server log.
   SQL text and connection strings never appear in client errors.
