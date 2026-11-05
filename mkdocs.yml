@@ -50,6 +50,7 @@ nav:
       - Milestone 6: Milestone6.md
       - Milestone 7: Milestone7.md
       - CTE Support (Plan): CtePlan.md
+      - Query Cache (Plan): CachePlan.md
 
 markdown_extensions:
   - admonition

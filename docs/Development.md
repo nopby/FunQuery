@@ -110,6 +110,41 @@ curl "http://localhost:5000/query?source=people&q=%24source(%40source).%24filter
 playground at <http://localhost:5000/playground/>, so this host can run PostgreSQL queries from the
 browser.
 
+### Optional query cache
+
+The query cache is disabled by default. L1 is in-process memory; L2 is Valkey/Redis. Enable it through
+configuration/environment variables:
+
+```powershell
+$env:Cache__Enabled = 'true'
+$env:Cache__Valkey = '127.0.0.1:6379'
+dotnet run --project hosts/FunQuery.PostgreSql.Server
+```
+
+Start Valkey locally with Podman if needed:
+
+```powershell
+podman run -d --name funquery-valkey `
+  -p 127.0.0.1:6379:6379 `
+  docker.io/valkey/valkey:8-alpine
+```
+
+Without `Cache__Valkey`, the cache still works as L1-only. Useful settings:
+
+```text
+Cache__LocalTtlSeconds        default 2
+Cache__DistributedTtlSeconds  default 30
+Cache__MaxEntryBytes          default 262144
+Cache__MaxEntries             default 1024
+Cache__KeyPrefix              default fq:q:v1:
+Cache__Version                default 1
+```
+
+Cached results can be stale for up to the TTL. Errors, oversized results, and requests that fail
+authorization are never cached. In a multi-tenant host, register an `IQueryCacheScopeProvider` so the
+tenant/user scope becomes part of the cache key. Cross-instance single-flight (Redis lock) is not
+enabled yet; each instance may execute the same miss once.
+
 ### 6. Run the tests
 
 ```bash

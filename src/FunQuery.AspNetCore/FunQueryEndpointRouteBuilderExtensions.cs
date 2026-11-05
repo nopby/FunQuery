@@ -1,4 +1,5 @@
 using System.Text;
+using FunQuery.Caching;
 using FunQuery.Enums;
 using FunQuery.Execution;
 using FunQuery.SemanticTypes;
@@ -122,7 +123,6 @@ public static class FunQueryEndpointRouteBuilderExtensions
         var sources = context.RequestServices.GetRequiredService<SourceRegistry>();
 
         IQuerySource? source = null;
-        var typeEnvironment = variables;
 
         if (!string.IsNullOrEmpty(sourceName))
         {
@@ -132,7 +132,60 @@ public static class FunQueryEndpointRouteBuilderExtensions
                     QueryErrorCode.UnknownSource,
                     $"Unknown source '{sourceName}'.");
             }
+        }
 
+        var cache = context.RequestServices.GetService<IQueryResultCache>();
+
+        if (cache is not null && cache.Enabled)
+        {
+            var keyBuilder = context.RequestServices
+                .GetRequiredService<IQueryCacheKeyBuilder>();
+            var scope = context.RequestServices
+                .GetService<IQueryCacheScopeProvider>()
+                ?.GetScope(context);
+            var key = keyBuilder.Create(query, sourceName, variables, scope);
+
+            var payload = await cache.GetOrCreateAsync(
+                key,
+                token => ExecutePayloadAsync(
+                    engine,
+                    source,
+                    options,
+                    query,
+                    variables,
+                    token),
+                context.RequestAborted);
+
+            return Results.Bytes(
+                payload,
+                "application/json; charset=utf-8");
+        }
+
+        var direct = await ExecutePayloadAsync(
+            engine,
+            source,
+            options,
+            query,
+            variables,
+            context.RequestAborted);
+
+        return Results.Bytes(
+            direct,
+            "application/json; charset=utf-8");
+    }
+
+    private static async ValueTask<byte[]> ExecutePayloadAsync(
+        QueryEngine engine,
+        IQuerySource? source,
+        FunQueryOptions options,
+        string query,
+        QueryEnvironment variables,
+        CancellationToken cancellationToken)
+    {
+        var typeEnvironment = variables;
+
+        if (source is not null)
+        {
             // Analyzer hanya butuh tipe source, belum datanya.
             typeEnvironment = typeEnvironment.With(
                 QueryVariableValues.SourceVariableName,
@@ -148,19 +201,16 @@ public static class FunQueryEndpointRouteBuilderExtensions
             var result = await source.Executor.ExecuteAsync(
                 plan,
                 variables,
-                context.RequestAborted);
+                cancellationToken);
 
-            return Results.Text(
-                ValueJson.Serialize(result),
-                "application/json",
-                Encoding.UTF8);
+            return Encoding.UTF8.GetBytes(ValueJson.Serialize(result));
         }
 
         var valueEnvironment = variables;
 
         if (source is not null)
         {
-            var rows = await source.LoadAsync(context.RequestAborted);
+            var rows = await source.LoadAsync(cancellationToken);
 
             if (rows.Count > options.Limits.MaxSourceItems)
             {
@@ -177,10 +227,8 @@ public static class FunQueryEndpointRouteBuilderExtensions
                 new QueryParameter(new ArrayType(source.Schema), materialized));
         }
 
-        return Results.Text(
-            engine.ExecutePlan(plan, valueEnvironment, context.RequestAborted).ToJson(),
-            "application/json",
-            Encoding.UTF8);
+        return Encoding.UTF8.GetBytes(
+            engine.ExecutePlan(plan, valueEnvironment, cancellationToken).ToJson());
     }
 
     /// <summary>

@@ -319,6 +319,23 @@ The adapter is meant to accept input from untrusted clients. The rules below are
 
 See [`Sources.md`](Sources.md) for the source whitelist and row contract.
 
+## Optional query cache
+
+The adapter can serve identical queries from an opt-in result cache. The cache key includes the query
+text, source name, user variables, cache version, and the host's optional
+`IQueryCacheScopeProvider` scope. The bound `@source` rows are not part of the key.
+
+* Only successful results are cached; errors, timeouts, authorization failures, and oversized results
+  are not.
+* L1 is in-process memory; L2 is optional Valkey/Redis through `IDistributedCache`.
+* L2 failures fail open: the query executes and the response is returned.
+* Single-flight coalesces concurrent identical misses inside one process. Cross-instance single-flight
+  (Redis lock) is not enabled yet, so each instance may execute a miss once.
+* Cached results may be stale for up to the configured TTL. Hosts that need strict consistency must
+  disable the cache for that source.
+
+See [`CachePlan.md`](CachePlan.md) and [`Development.md`](Development.md) for configuration.
+
 ## Not included
 
 * Authentication and authorization; a host can put the endpoints behind its own middleware.

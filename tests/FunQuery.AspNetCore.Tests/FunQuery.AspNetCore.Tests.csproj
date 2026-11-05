@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../hosts/FunQuery.Server/FunQuery.Server.csproj" />
+    <ProjectReference Include="../../src/FunQuery.Caching/FunQuery.Caching.csproj" />
   </ItemGroup>
 
   <ItemGroup>

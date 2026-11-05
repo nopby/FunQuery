@@ -11,8 +11,13 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/FunQuery.AspNetCore/FunQuery.AspNetCore.csproj" />
+    <ProjectReference Include="../../src/FunQuery.Caching/FunQuery.Caching.csproj" />
     <ProjectReference Include="../../src/FunQuery.Playground/FunQuery.Playground.csproj" />
     <ProjectReference Include="../../src/FunQuery.PostgreSql/FunQuery.PostgreSql.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.12" />
   </ItemGroup>
 
 </Project>

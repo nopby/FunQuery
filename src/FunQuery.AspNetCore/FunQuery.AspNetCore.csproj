@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../FunQuery.csproj" />
+    <ProjectReference Include="../FunQuery.Caching/FunQuery.Caching.csproj" />
   </ItemGroup>
 
 </Project>
