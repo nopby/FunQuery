@@ -185,9 +185,7 @@ public static class FunQueryEndpointRouteBuilderExtensions
         {
             if (!sources.TryGet(sourceName, out source))
             {
-                throw new QueryException(
-                    QueryErrorCode.UnknownSource,
-                    $"Unknown source '{sourceName}'.");
+                throw NamedSourceMissing(sourceName, named);
             }
         }
 
@@ -232,9 +230,7 @@ public static class FunQueryEndpointRouteBuilderExtensions
             {
                 if (!sources.TryGet(sourceName, out source))
                 {
-                    throw new QueryException(
-                        QueryErrorCode.UnknownSource,
-                        $"Unknown source '{sourceName}'.");
+                    throw NamedSourceMissing(sourceName, named);
                 }
             }
         }
@@ -279,6 +275,17 @@ public static class FunQueryEndpointRouteBuilderExtensions
             "application/json; charset=utf-8");
     }
 
+    private static QueryException NamedSourceMissing(
+        string sourceName,
+        NamedQueryResolution? named) =>
+        named is not null
+            ? new QueryException(
+                QueryErrorCode.InvalidNamedQuery,
+                $"Named query '{named.Key}' references unregistered source '{sourceName}'.")
+            : new QueryException(
+                QueryErrorCode.UnknownSource,
+                $"Unknown source '{sourceName}'.");
+
     private static async ValueTask<NamedQueryResolution> ResolveNamedAsync(
         HttpContext context,
         string key,
@@ -292,6 +299,20 @@ public static class FunQueryEndpointRouteBuilderExtensions
         var scope = context.RequestServices
             .GetRequiredService<INamedQueryScopeProvider>()
             .GetScope(context);
+
+        var access = context.RequestServices
+            .GetRequiredService<INamedQueryAccessProvider>();
+
+        if (!await access.CanInvokeAsync(
+                context,
+                scope,
+                key,
+                cancellationToken))
+        {
+            throw new QueryException(
+                QueryErrorCode.NamedQueryForbidden,
+                $"Named query '{key}' is not available to this caller.");
+        }
 
         return await resolver.ResolveAsync(
             scope.AppId,

@@ -35,6 +35,7 @@ public static class QueryErrorCodeExtensions
         QueryErrorCode.InvalidNamedQueryKey => "INVALID_NAMED_QUERY_KEY",
         QueryErrorCode.UnknownNamedQuery => "UNKNOWN_NAMED_QUERY",
         QueryErrorCode.NamedQueryDisabled => "NAMED_QUERY_DISABLED",
+        QueryErrorCode.NamedQueryForbidden => "NAMED_QUERY_FORBIDDEN",
         QueryErrorCode.NamedQueriesUnavailable => "NAMED_QUERIES_UNAVAILABLE",
         QueryErrorCode.InvalidNamedQuery => "INVALID_NAMED_QUERY",
         QueryErrorCode.ItemOutOfContext => "ITEM_OUT_OF_CONTEXT",

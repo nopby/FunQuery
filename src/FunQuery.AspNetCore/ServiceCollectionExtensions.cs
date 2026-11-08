@@ -21,6 +21,7 @@ public static class ServiceCollectionExtensions
 
         services.TryAddSingleton(SourceRegistry.Empty);
         services.TryAddSingleton<INamedQueryScopeProvider, GlobalNamedQueryScopeProvider>();
+        services.TryAddSingleton<INamedQueryAccessProvider, AllowAllNamedQueryAccessProvider>();
         services.AddSingleton(options);
         services.AddSingleton(new QueryEngine(options.Limits));
 

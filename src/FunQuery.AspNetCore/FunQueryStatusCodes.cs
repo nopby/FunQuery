@@ -30,6 +30,8 @@ public static class FunQueryStatusCodes
             QueryErrorCode.UnknownNamedQuery or
             QueryErrorCode.NamedQueryDisabled => StatusCodes.Status404NotFound,
 
+            QueryErrorCode.NamedQueryForbidden => StatusCodes.Status403Forbidden,
+
             // Catalog tidak tersedia atau tidak dapat di-resolve.
             QueryErrorCode.NamedQueriesUnavailable => StatusCodes.Status503ServiceUnavailable,
 

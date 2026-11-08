@@ -38,3 +38,27 @@ public interface INamedQueryResolver
         string key,
         CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Host-owned access check for invoking a named query. Implement with claims/policies
+/// (Keycloak roles, tenant claims, etc.). The default allows all and is suitable only for
+/// single-tenant/development hosts.
+/// </summary>
+public interface INamedQueryAccessProvider
+{
+    ValueTask<bool> CanInvokeAsync(
+        HttpContext context,
+        NamedQueryScope scope,
+        string key,
+        CancellationToken cancellationToken);
+}
+
+public sealed class AllowAllNamedQueryAccessProvider : INamedQueryAccessProvider
+{
+    public ValueTask<bool> CanInvokeAsync(
+        HttpContext context,
+        NamedQueryScope scope,
+        string key,
+        CancellationToken cancellationToken) =>
+        ValueTask.FromResult(true);
+}

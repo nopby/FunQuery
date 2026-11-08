@@ -36,6 +36,7 @@ public enum QueryErrorCode
     InvalidNamedQueryKey,
     UnknownNamedQuery,
     NamedQueryDisabled,
+    NamedQueryForbidden,
     NamedQueriesUnavailable,
     InvalidNamedQuery,
 

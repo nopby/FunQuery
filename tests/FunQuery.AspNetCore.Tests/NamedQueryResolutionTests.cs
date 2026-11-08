@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using FunQuery.AspNetCore.Tests.Support;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -16,7 +17,9 @@ public sealed class NamedQueryResolutionTests
 
     private static WebApplicationFactory<Program> CreateFactory(
         TestSource source,
-        INamedQueryResolver? resolver = null) =>
+        INamedQueryResolver? resolver = null,
+        INamedQueryAccessProvider? access = null,
+        INamedQueryScopeProvider? scope = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
                 builder.ConfigureServices(services =>
@@ -26,6 +29,12 @@ public sealed class NamedQueryResolutionTests
 
                     if (resolver is not null)
                         services.AddSingleton(resolver);
+
+                    if (access is not null)
+                        services.AddSingleton(access);
+
+                    if (scope is not null)
+                        services.AddSingleton(scope);
                 }));
 
     private static FakeResolver Resolver() => new(
@@ -134,11 +143,80 @@ public sealed class NamedQueryResolutionTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task ForbiddenNamedQueryReturns403()
+    {
+        using var factory = CreateFactory(
+            Source(),
+            Resolver(),
+            access: new DenyAccessProvider());
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/query?key=orders");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ScopeIsPassedToTheResolver()
+    {
+        var resolver = Resolver();
+        using var factory = CreateFactory(
+            Source(),
+            resolver,
+            scope: new FixedScopeProvider(new NamedQueryScope("app", "tenant")));
+        var client = factory.CreateClient();
+
+        await client.GetAsync("/query?key=orders");
+
+        Assert.Equal("app", resolver.LastAppId);
+        Assert.Equal("tenant", resolver.LastTenantId);
+    }
+
+    [Fact]
+    public async Task MissingCatalogSourceReturns500()
+    {
+        var resolver = new FakeResolver(new NamedQueryResolution(
+            "orders",
+            "$source(@source).$count()",
+            "missing",
+            "global",
+            "global",
+            1));
+
+        using var factory = CreateFactory(Source(), resolver);
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/query?key=orders");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+    }
+
+    private sealed class DenyAccessProvider : INamedQueryAccessProvider
+    {
+        public ValueTask<bool> CanInvokeAsync(
+            HttpContext context,
+            NamedQueryScope scope,
+            string key,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult(false);
+    }
+
+    private sealed class FixedScopeProvider(NamedQueryScope scope)
+        : INamedQueryScopeProvider
+    {
+        public NamedQueryScope GetScope(HttpContext context) => scope;
+    }
+
     private sealed class FakeResolver(params NamedQueryResolution[] entries)
         : INamedQueryResolver
     {
         private readonly Dictionary<string, NamedQueryResolution> _entries =
             entries.ToDictionary(entry => entry.Key, StringComparer.Ordinal);
+
+        public string? LastAppId { get; private set; }
+
+        public string? LastTenantId { get; private set; }
 
         public ValueTask<NamedQueryResolution> ResolveAsync(
             string appId,
@@ -146,6 +224,9 @@ public sealed class NamedQueryResolutionTests
             string key,
             CancellationToken cancellationToken)
         {
+            LastAppId = appId;
+            LastTenantId = tenantId;
+
             if (_entries.TryGetValue(key, out var entry))
                 return ValueTask.FromResult(entry);
 
