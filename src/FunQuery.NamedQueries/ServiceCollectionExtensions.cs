@@ -1,3 +1,4 @@
+using FunQuery.AspNetCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -32,6 +33,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<INamedQueryCacheInvalidator>(provider =>
             (INamedQueryCacheInvalidator)provider.GetRequiredService<INamedQueryStore>());
         services.TryAddSingleton<INamedQueryAdminService, NamedQueryAdminService>();
+        services.TryAddSingleton<INamedQueryResolver, NamedQueryResolver>();
 
         if (options.EnableChangeListener)
             services.AddHostedService<NamedQueryChangeListener>();

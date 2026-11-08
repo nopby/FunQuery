@@ -20,6 +20,7 @@ public static class ServiceCollectionExtensions
         options.Validate();
 
         services.TryAddSingleton(SourceRegistry.Empty);
+        services.TryAddSingleton<INamedQueryScopeProvider, GlobalNamedQueryScopeProvider>();
         services.AddSingleton(options);
         services.AddSingleton(new QueryEngine(options.Limits));
 

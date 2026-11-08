@@ -26,6 +26,16 @@ public static class FunQueryStatusCodes
             // Content-Type yang tidak didukung.
             QueryErrorCode.UnsupportedMediaType => StatusCodes.Status415UnsupportedMediaType,
 
+            // Named query tidak ditemukan / dinonaktifkan.
+            QueryErrorCode.UnknownNamedQuery or
+            QueryErrorCode.NamedQueryDisabled => StatusCodes.Status404NotFound,
+
+            // Catalog tidak tersedia atau tidak dapat di-resolve.
+            QueryErrorCode.NamedQueriesUnavailable => StatusCodes.Status503ServiceUnavailable,
+
+            // Catalog berisi query yang tidak valid; ini kesalahan server.
+            QueryErrorCode.InvalidNamedQuery => StatusCodes.Status500InternalServerError,
+
             // Bug di server, bukan kesalahan pemanggil.
             QueryErrorCode.InternalError => StatusCodes.Status500InternalServerError,
 

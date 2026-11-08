@@ -8,7 +8,10 @@ namespace FunQuery.AspNetCore;
 /// </summary>
 public sealed class QueryRequest
 {
-    /// <summary>Ekspresi FunQuery. Wajib.</summary>
+    /// <summary>Named-query key. Tidak boleh dikirim bersamaan dengan <see cref="Query"/>.</summary>
+    public string? Key { get; init; }
+
+    /// <summary>Ekspresi FunQuery. Wajib bila <see cref="Key"/> tidak ada.</summary>
     public string? Query { get; init; }
 
     /// <summary>Nama source terdaftar; bila ada, diikat ke <c>@source</c>.</summary>

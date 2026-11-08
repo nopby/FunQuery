@@ -19,6 +19,12 @@ public sealed class FunQueryOptions
     public string SourceParameter { get; set; } = "source";
 
     /// <summary>
+    /// Nama query parameter untuk named-query key, default <c>key</c>. Tidak boleh sama dengan
+    /// parameter query/source.
+    /// </summary>
+    public string KeyParameter { get; set; } = "key";
+
+    /// <summary>
     /// Bila true, adapter memetakan dokumen OpenAPI 3.1 di <see cref="OpenApiRoute"/>.
     /// Default false; sample host menyalakannya.
     /// </summary>
@@ -64,6 +70,20 @@ public sealed class FunQueryOptions
             throw new ArgumentException(
                 $"{nameof(SourceParameter)} must not be empty.",
                 nameof(SourceParameter));
+
+        if (string.IsNullOrWhiteSpace(KeyParameter))
+            throw new ArgumentException(
+                $"{nameof(KeyParameter)} must not be empty.",
+                nameof(KeyParameter));
+
+        if (string.Equals(KeyParameter, QueryParameter, StringComparison.Ordinal) ||
+            string.Equals(KeyParameter, SourceParameter, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"{nameof(KeyParameter)} must differ from {nameof(QueryParameter)} " +
+                $"and {nameof(SourceParameter)}.",
+                nameof(KeyParameter));
+        }
 
         if (string.IsNullOrWhiteSpace(OpenApiRoute) ||
             !OpenApiRoute.StartsWith('/'))

@@ -1,6 +1,6 @@
 # Named Queries (`$named`) — Work Plan
 
-**Status:** 🚧 N1–N4 implemented; N5–N8 pending.
+**Status:** 🚧 N1–N5 implemented; N6–N8 pending.
 
 **Goal:** let a client invoke a pre-approved query stored in `funquery.named_queries` by key, without
 sending query text and without exposing the catalog as a query source.
@@ -521,7 +521,7 @@ Error messages must not list available keys.
 | N2 | PostgreSQL store, lookup cache, and `LISTEN/NOTIFY` | N1 | M | ⏳ |
 | N3 | Admin CRUD API and validation | N1, N2 | M | ⏳ |
 | N4 | `$named` recognition, validation, and top-level rule | N1 | M | ✅ |
-| N5 | HTTP `?key=` and `$named` resolution | N2, N4 | M | ⏳ |
+| N5 | HTTP `?key=` and `$named` resolution | N2, N4 | M | ✅ |
 | N6 | Permission, app/tenant, and source checks | N5 | S | ⏳ |
 | N7 | Cache policy integration and invalidation | N5 | M | ⏳ |
 | N8 | Tests, docs, AOT publish and smoke test | N1–N7 | S | ⏳ |
@@ -654,8 +654,10 @@ N1–N3 are implemented:
   integration tests.
 * N4: core `$named('key')` recognition with top-level-only, string-literal, non-empty-key validation;
   `QueryPlan.NamedQueryKey` metadata and syntax tests.
-* Full suite: **1216 tests**. The catalog schema has been applied to the local development database.
-* N5–N8 (`?key=` resolution, permissions, cache integration, docs/AOT close-out) remain pending.
+* N5: `?key=` and `$named('key')` resolution in the HTTP adapter, catalog source binding, GET/POST
+  parity, key/source/query conflict validation, and a PostgreSQL host smoke test.
+* Full suite: **1226 tests**. The catalog schema has been applied to the local development database.
+* N6–N8 (permissions, cache integration, docs/AOT close-out) remain pending.
 
 ## Risks and open decisions
 

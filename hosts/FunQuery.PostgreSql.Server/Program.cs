@@ -1,5 +1,6 @@
 using FunQuery.AspNetCore;
 using FunQuery.Caching;
+using FunQuery.NamedQueries;
 using FunQuery.Playground;
 using FunQuery.PostgreSql;
 using FunQuery.PostgreSql.Server.Sources;
@@ -42,6 +43,16 @@ builder.Services.AddFunQuerySources(sources => sources
     .Add(new PeopleSource())
     .Add(new PostgreSqlSource("orders", ordersSchema, "orders", dataSource)
         .AsQuerySource("orders", ordersSchema)));
+
+builder.Services.AddFunQueryNamedQueries(options =>
+{
+    options.ConnectionString = connectionString;
+    options.Schema = builder.Configuration["NamedQueries:Schema"] ?? "funquery";
+    options.Table = builder.Configuration["NamedQueries:Table"] ?? "named_queries";
+    options.EnableChangeListener = ReadBool(
+        builder.Configuration["NamedQueries:EnableChangeListener"],
+        defaultValue: true);
+});
 
 var cacheConnection = builder.Configuration.GetConnectionString("Valkey")
     ?? builder.Configuration["Cache:Valkey"];

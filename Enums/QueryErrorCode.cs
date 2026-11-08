@@ -34,6 +34,10 @@ public enum QueryErrorCode
     InvalidLetTarget,
     InvalidNamedQueryPosition,
     InvalidNamedQueryKey,
+    UnknownNamedQuery,
+    NamedQueryDisabled,
+    NamedQueriesUnavailable,
+    InvalidNamedQuery,
 
     // ~ dan path
     ItemOutOfContext,

@@ -80,17 +80,39 @@ public static class FunQueryEndpointRouteBuilderExtensions
         {
             var queryValues = context.Request.Query[options.QueryParameter];
             var query = queryValues.Count > 0 ? queryValues[0] : null;
+            var key = context.Request.Query[options.KeyParameter].FirstOrDefault();
+            var sourceName = context.Request.Query[options.SourceParameter].FirstOrDefault();
 
-            if (string.IsNullOrWhiteSpace(query))
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                if (!string.IsNullOrWhiteSpace(query))
+                {
+                    throw InvalidRequest(
+                        $"Use either '{options.QueryParameter}' or '{options.KeyParameter}', not both.");
+                }
+
+                if (!string.IsNullOrWhiteSpace(sourceName))
+                {
+                    throw InvalidRequest(
+                        "The 'source' parameter cannot be used with a named query.");
+                }
+            }
+            else if (string.IsNullOrWhiteSpace(query))
             {
                 throw InvalidRequest(
-                    $"The '{options.QueryParameter}' query parameter is required.");
+                    $"The '{options.QueryParameter}' or '{options.KeyParameter}' " +
+                    "query parameter is required.");
             }
 
-            var sourceName = context.Request.Query[options.SourceParameter].FirstOrDefault();
             var variables = QueryStringVariables.Read(context.Request.Query, options.Limits);
 
-            return await ExecuteAsync(context, options, query, sourceName, variables);
+            return await ExecuteAsync(
+                context,
+                options,
+                query,
+                sourceName,
+                key,
+                variables);
         });
 
     private static Task HandlePostAsync(HttpContext context, FunQueryOptions options) =>
@@ -98,9 +120,26 @@ public static class FunQueryEndpointRouteBuilderExtensions
         {
             var request = await QueryRequestReader.ReadAsync(context, options);
             var query = request.Query;
+            var key = request.Key;
 
-            if (string.IsNullOrWhiteSpace(query))
-                throw InvalidRequest("The 'query' field is required.");
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                if (!string.IsNullOrWhiteSpace(query))
+                {
+                    throw InvalidRequest(
+                        "Use either 'query' or 'key', not both.");
+                }
+
+                if (!string.IsNullOrWhiteSpace(request.Source))
+                {
+                    throw InvalidRequest(
+                        "The 'source' field cannot be used with a named query.");
+                }
+            }
+            else if (string.IsNullOrWhiteSpace(query))
+            {
+                throw InvalidRequest("The 'query' or 'key' field is required.");
+            }
 
             var variables = QueryRequestReader.ReadVariables(request, options.Limits);
 
@@ -109,18 +148,36 @@ public static class FunQueryEndpointRouteBuilderExtensions
                 options,
                 query,
                 request.Source,
+                key,
                 variables);
         });
 
     private static async Task<IResult> ExecuteAsync(
         HttpContext context,
         FunQueryOptions options,
-        string query,
+        string? query,
         string? sourceName,
+        string? key,
         QueryEnvironment variables)
     {
         var engine = context.RequestServices.GetRequiredService<QueryEngine>();
         var sources = context.RequestServices.GetRequiredService<SourceRegistry>();
+
+        NamedQueryResolution? named = null;
+
+        if (!string.IsNullOrWhiteSpace(key))
+        {
+            named = await ResolveNamedAsync(
+                context,
+                key,
+                context.RequestAborted);
+
+            query = named.Query;
+            sourceName = named.SourceName;
+        }
+
+        if (string.IsNullOrWhiteSpace(query))
+            throw InvalidRequest("A query or named-query key is required.");
 
         IQuerySource? source = null;
 
@@ -134,6 +191,54 @@ public static class FunQueryEndpointRouteBuilderExtensions
             }
         }
 
+        var typeEnvironment = variables;
+
+        if (source is not null)
+        {
+            typeEnvironment = typeEnvironment.With(
+                QueryVariableValues.SourceVariableName,
+                new QueryParameter(new ArrayType(source.Schema), null));
+        }
+
+        // Resolve $named before touching the cache or provider. The request may also use
+        // ?key=, in which case this prepare validates the resolved query text.
+        var prepared = engine.Prepare(query, typeEnvironment);
+
+        if (prepared.NamedQueryKey is not null)
+        {
+            if (named is not null)
+            {
+                throw new QueryException(
+                    QueryErrorCode.InvalidNamedQuery,
+                    "A named query cannot invoke another $named.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(sourceName))
+            {
+                throw InvalidRequest(
+                    "The 'source' parameter cannot be used with $named.");
+            }
+
+            named = await ResolveNamedAsync(
+                context,
+                prepared.NamedQueryKey,
+                context.RequestAborted);
+
+            query = named.Query;
+            sourceName = named.SourceName;
+            source = null;
+
+            if (!string.IsNullOrEmpty(sourceName))
+            {
+                if (!sources.TryGet(sourceName, out source))
+                {
+                    throw new QueryException(
+                        QueryErrorCode.UnknownSource,
+                        $"Unknown source '{sourceName}'.");
+                }
+            }
+        }
+
         var cache = context.RequestServices.GetService<IQueryResultCache>();
 
         if (cache is not null && cache.Enabled)
@@ -143,10 +248,10 @@ public static class FunQueryEndpointRouteBuilderExtensions
             var scope = context.RequestServices
                 .GetService<IQueryCacheScopeProvider>()
                 ?.GetScope(context);
-            var key = keyBuilder.Create(query, sourceName, variables, scope);
+            var cacheKey = keyBuilder.Create(query, sourceName, variables, scope);
 
             var payload = await cache.GetOrCreateAsync(
-                key,
+                cacheKey,
                 token => ExecutePayloadAsync(
                     engine,
                     source,
@@ -172,6 +277,27 @@ public static class FunQueryEndpointRouteBuilderExtensions
         return Results.Bytes(
             direct,
             "application/json; charset=utf-8");
+    }
+
+    private static async ValueTask<NamedQueryResolution> ResolveNamedAsync(
+        HttpContext context,
+        string key,
+        CancellationToken cancellationToken)
+    {
+        var resolver = context.RequestServices.GetService<INamedQueryResolver>()
+            ?? throw new QueryException(
+                QueryErrorCode.NamedQueriesUnavailable,
+                "Named queries are not configured on this host.");
+
+        var scope = context.RequestServices
+            .GetRequiredService<INamedQueryScopeProvider>()
+            .GetScope(context);
+
+        return await resolver.ResolveAsync(
+            scope.AppId,
+            scope.TenantId,
+            key,
+            cancellationToken);
     }
 
     private static async ValueTask<byte[]> ExecutePayloadAsync(

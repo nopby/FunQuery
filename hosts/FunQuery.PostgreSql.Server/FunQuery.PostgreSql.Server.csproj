@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/FunQuery.AspNetCore/FunQuery.AspNetCore.csproj" />
     <ProjectReference Include="../../src/FunQuery.Caching/FunQuery.Caching.csproj" />
+    <ProjectReference Include="../../src/FunQuery.NamedQueries/FunQuery.NamedQueries.csproj" />
     <ProjectReference Include="../../src/FunQuery.Playground/FunQuery.Playground.csproj" />
     <ProjectReference Include="../../src/FunQuery.PostgreSql/FunQuery.PostgreSql.csproj" />
   </ItemGroup>
