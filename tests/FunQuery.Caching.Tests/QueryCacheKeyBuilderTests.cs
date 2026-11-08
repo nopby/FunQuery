@@ -105,4 +105,55 @@ public sealed class QueryCacheKeyBuilderTests
         Assert.Equal(Key(scope: null), Key(scope: null));
         Assert.NotEqual(Key(scope: null), Key(scope: "tenant-a"));
     }
+
+    [Fact]
+    public void NamedKeyIncludesAppTenantVersionAndQuery()
+    {
+        var builder = new QueryCacheKeyBuilder(Options);
+
+        string Named(
+            string app = "app",
+            string tenant = "tenant",
+            int version = 1,
+            string query = "$source(@source).$count()") =>
+            builder.CreateNamed(
+                app,
+                tenant,
+                "orders",
+                version,
+                query,
+                "orders",
+                QueryEnvironment.Empty);
+
+        var baseline = Named();
+
+        Assert.Equal(baseline, Named());
+        Assert.NotEqual(baseline, Named(app: "other"));
+        Assert.NotEqual(baseline, Named(tenant: "other"));
+        Assert.NotEqual(baseline, Named(version: 2));
+        Assert.NotEqual(baseline, Named(query: "$source(@source).$select(id)"));
+    }
+
+    [Fact]
+    public void NamedAndAdHocKeysDoNotCollide()
+    {
+        var builder = new QueryCacheKeyBuilder(Options);
+
+        var adHoc = builder.Create(
+            "$source(@source).$count()",
+            "orders",
+            QueryEnvironment.Empty,
+            "app");
+
+        var named = builder.CreateNamed(
+            "app",
+            "tenant",
+            "orders",
+            1,
+            "$source(@source).$count()",
+            "orders",
+            QueryEnvironment.Empty);
+
+        Assert.NotEqual(adHoc, named);
+    }
 }

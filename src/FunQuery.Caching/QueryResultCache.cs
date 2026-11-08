@@ -57,7 +57,10 @@ public sealed class QueryResultCache : IQueryResultCache
             return payload;
         }
 
-        return await TryGetL2Async(key, cancellationToken).ConfigureAwait(false);
+        return await TryGetL2Async(
+            key,
+            QueryCachePolicy.Default,
+            cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask SetAsync(
@@ -77,19 +80,30 @@ public sealed class QueryResultCache : IQueryResultCache
             return;
         }
 
-        SetL1(key, payload);
-        await SetL2Async(key, payload, cancellationToken).ConfigureAwait(false);
+        SetL1(key, payload, QueryCachePolicy.Default);
+        await SetL2Async(
+            key,
+            payload,
+            QueryCachePolicy.Default,
+            cancellationToken).ConfigureAwait(false);
     }
+
+    public ValueTask<byte[]> GetOrCreateAsync(
+        string key,
+        Func<CancellationToken, ValueTask<byte[]>> factory,
+        CancellationToken cancellationToken) =>
+        GetOrCreateAsync(key, factory, QueryCachePolicy.Default, cancellationToken);
 
     public async ValueTask<byte[]> GetOrCreateAsync(
         string key,
         Func<CancellationToken, ValueTask<byte[]>> factory,
+        QueryCachePolicy policy,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(key);
         ArgumentNullException.ThrowIfNull(factory);
 
-        if (!Enabled)
+        if (!Enabled || policy.Mode == QueryCacheMode.Disabled)
             return await factory(cancellationToken).ConfigureAwait(false);
 
         if (_l1.TryGetValue(key, out byte[]? cached))
@@ -98,7 +112,7 @@ public sealed class QueryResultCache : IQueryResultCache
             return cached!;
         }
 
-        var fromL2 = await TryGetL2Async(key, cancellationToken)
+        var fromL2 = await TryGetL2Async(key, policy, cancellationToken)
             .ConfigureAwait(false);
 
         if (fromL2 is not null)
@@ -118,7 +132,7 @@ public sealed class QueryResultCache : IQueryResultCache
 
             if (!_flights.TryGetValue(key, out var flight))
             {
-                var candidate = new Flight(factory);
+                var candidate = new Flight(factory, policy);
 
                 if (_flights.TryAdd(key, candidate))
                 {
@@ -167,8 +181,10 @@ public sealed class QueryResultCache : IQueryResultCache
     {
         try
         {
-            var cached = await TryGetL2Async(key, flight.Cts.Token)
-                .ConfigureAwait(false);
+            var cached = await TryGetL2Async(
+                key,
+                flight.Policy,
+                flight.Cts.Token).ConfigureAwait(false);
 
             byte[] result;
 
@@ -187,9 +203,9 @@ public sealed class QueryResultCache : IQueryResultCache
                 }
                 else
                 {
-                    await SetL2Async(key, result, flight.Cts.Token)
+                    await SetL2Async(key, result, flight.Policy, flight.Cts.Token)
                         .ConfigureAwait(false);
-                    SetL1(key, result);
+                    SetL1(key, result, flight.Policy);
                 }
             }
 
@@ -216,6 +232,7 @@ public sealed class QueryResultCache : IQueryResultCache
 
     private async ValueTask<byte[]?> TryGetL2Async(
         string key,
+        QueryCachePolicy policy,
         CancellationToken cancellationToken)
     {
         if (_l2 is null)
@@ -236,7 +253,7 @@ public sealed class QueryResultCache : IQueryResultCache
             }
 
             _metrics.RecordL2Hit();
-            SetL1(key, payload);
+            SetL1(key, payload, policy);
             return payload;
         }
         catch (OperationCanceledException)
@@ -256,6 +273,7 @@ public sealed class QueryResultCache : IQueryResultCache
     private async ValueTask SetL2Async(
         string key,
         byte[] payload,
+        QueryCachePolicy policy,
         CancellationToken cancellationToken)
     {
         if (_l2 is null)
@@ -268,7 +286,7 @@ public sealed class QueryResultCache : IQueryResultCache
                 payload,
                 new DistributedCacheEntryOptions
                 {
-                    AbsoluteExpirationRelativeToNow = _options.DistributedTtl,
+                    AbsoluteExpirationRelativeToNow = EffectiveTtls(policy).Distributed,
                 },
                 cancellationToken).ConfigureAwait(false);
         }
@@ -285,7 +303,10 @@ public sealed class QueryResultCache : IQueryResultCache
         }
     }
 
-    private void SetL1(string key, byte[] payload)
+    private void SetL1(
+        string key,
+        byte[] payload,
+        QueryCachePolicy policy)
     {
         try
         {
@@ -294,7 +315,7 @@ public sealed class QueryResultCache : IQueryResultCache
                 payload,
                 new MemoryCacheEntryOptions
                 {
-                    AbsoluteExpirationRelativeToNow = _options.LocalTtl,
+                    AbsoluteExpirationRelativeToNow = EffectiveTtls(policy).Local,
                     Size = 1,
                 });
         }
@@ -307,16 +328,46 @@ public sealed class QueryResultCache : IQueryResultCache
         }
     }
 
+    private (TimeSpan Local, TimeSpan Distributed) EffectiveTtls(
+        QueryCachePolicy policy)
+    {
+        var local = policy.Mode == QueryCacheMode.Custom &&
+                    policy.LocalTtl is { } requestedLocal
+            ? requestedLocal
+            : _options.LocalTtl;
+
+        var distributed = policy.Mode == QueryCacheMode.Custom &&
+                          policy.DistributedTtl is { } requestedDistributed
+            ? requestedDistributed
+            : _options.DistributedTtl;
+
+        if (local > _options.LocalTtl)
+            local = _options.LocalTtl;
+
+        if (distributed > _options.DistributedTtl)
+            distributed = _options.DistributedTtl;
+
+        if (local > distributed)
+            local = distributed;
+
+        return (local, distributed);
+    }
+
     private sealed class Flight
     {
-        public Flight(Func<CancellationToken, ValueTask<byte[]>> factory)
+        public Flight(
+            Func<CancellationToken, ValueTask<byte[]>> factory,
+            QueryCachePolicy policy)
         {
             Factory = factory;
+            Policy = policy;
             Completion = new TaskCompletionSource<byte[]>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
         }
 
         public Func<CancellationToken, ValueTask<byte[]>> Factory { get; }
+
+        public QueryCachePolicy Policy { get; }
 
         public TaskCompletionSource<byte[]> Completion { get; }
 

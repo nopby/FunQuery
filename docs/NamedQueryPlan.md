@@ -1,6 +1,6 @@
 # Named Queries (`$named`) — Work Plan
 
-**Status:** 🚧 N1–N6 implemented; N7–N8 pending.
+**Status:** 🚧 N1–N7 implemented; N8 pending.
 
 **Goal:** let a client invoke a pre-approved query stored in `funquery.named_queries` by key, without
 sending query text and without exposing the catalog as a query source.
@@ -523,7 +523,7 @@ Error messages must not list available keys.
 | N4 | `$named` recognition, validation, and top-level rule | N1 | M | ✅ |
 | N5 | HTTP `?key=` and `$named` resolution | N2, N4 | M | ✅ |
 | N6 | Permission, app/tenant, and source checks | N5 | S | ✅ |
-| N7 | Cache policy integration and invalidation | N5 | M | ⏳ |
+| N7 | Cache policy integration and invalidation | N5 | M | ✅ |
 | N8 | Tests, docs, AOT publish and smoke test | N1–N7 | S | ⏳ |
 
 ### N1 — Catalog schema and model
@@ -658,8 +658,10 @@ N1–N3 are implemented:
   parity, key/source/query conflict validation, and a PostgreSQL host smoke test.
 * N6: `INamedQueryAccessProvider`, default allow-all hook, app/tenant scope plumbing, 403 mapping,
   catalog source-registration checks, and scope/permission tests.
-* Full suite: **1229 tests**. The catalog schema has been applied to the local development database.
-* N7–N8 (cache integration, docs/AOT close-out) remain pending.
+* N7: named-query cache keys include app/tenant/key/version/query hash; cache mode and TTLs come from
+  the catalog and are clamped by the host. `?key=` and `$named` share the same result-cache key.
+* Full suite: **1233 tests**. The catalog schema has been applied to the local development database.
+* N8 (docs and AOT close-out) remains pending.
 
 ## Risks and open decisions
 

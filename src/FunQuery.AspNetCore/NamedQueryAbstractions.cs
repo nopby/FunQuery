@@ -24,7 +24,15 @@ public sealed record NamedQueryResolution(
     string? SourceName,
     string AppId,
     string TenantId,
-    int Version);
+    int Version)
+{
+    /// <summary>none, default, atau custom.</summary>
+    public string CacheMode { get; init; } = "default";
+
+    public int? L1TtlSeconds { get; init; }
+
+    public int? L2TtlSeconds { get; init; }
+}
 
 /// <summary>
 /// Disediakan oleh modul named query. Adapter hanya bergantung pada abstraksi ini agar

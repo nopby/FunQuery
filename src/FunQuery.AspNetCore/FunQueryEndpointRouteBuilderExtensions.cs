@@ -244,7 +244,19 @@ public static class FunQueryEndpointRouteBuilderExtensions
             var scope = context.RequestServices
                 .GetService<IQueryCacheScopeProvider>()
                 ?.GetScope(context);
-            var cacheKey = keyBuilder.Create(query, sourceName, variables, scope);
+            var cacheKey = named is null
+                ? keyBuilder.Create(query, sourceName, variables, scope)
+                : keyBuilder.CreateNamed(
+                    named.AppId,
+                    named.TenantId,
+                    named.Key,
+                    named.Version,
+                    query,
+                    sourceName,
+                    variables);
+            var policy = named is null
+                ? QueryCachePolicy.Default
+                : ToCachePolicy(named);
 
             var payload = await cache.GetOrCreateAsync(
                 cacheKey,
@@ -255,6 +267,7 @@ public static class FunQueryEndpointRouteBuilderExtensions
                     query,
                     variables,
                     token),
+                policy,
                 context.RequestAborted);
 
             return Results.Bytes(
@@ -274,6 +287,21 @@ public static class FunQueryEndpointRouteBuilderExtensions
             direct,
             "application/json; charset=utf-8");
     }
+
+    private static QueryCachePolicy ToCachePolicy(NamedQueryResolution named) =>
+        named.CacheMode switch
+        {
+            "none" => QueryCachePolicy.Disabled,
+            "custom" => new QueryCachePolicy(
+                QueryCacheMode.Custom,
+                named.L1TtlSeconds is > 0
+                    ? TimeSpan.FromSeconds(named.L1TtlSeconds.Value)
+                    : null,
+                named.L2TtlSeconds is > 0
+                    ? TimeSpan.FromSeconds(named.L2TtlSeconds.Value)
+                    : null),
+            _ => QueryCachePolicy.Default,
+        };
 
     private static QueryException NamedSourceMissing(
         string sourceName,

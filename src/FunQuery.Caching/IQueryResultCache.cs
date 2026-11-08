@@ -24,4 +24,14 @@ public interface IQueryResultCache
         string key,
         Func<CancellationToken, ValueTask<byte[]>> factory,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sama seperti overload sebelumnya, tetapi memakai policy per request. Policy
+    /// <see cref="QueryCachePolicy.Disabled"/> melewati cache sepenuhnya.
+    /// </summary>
+    ValueTask<byte[]> GetOrCreateAsync(
+        string key,
+        Func<CancellationToken, ValueTask<byte[]>> factory,
+        QueryCachePolicy policy,
+        CancellationToken cancellationToken);
 }

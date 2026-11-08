@@ -68,6 +68,16 @@ public sealed class NamedQueryResolver : INamedQueryResolver
             entry.Source,
             entry.AppId,
             entry.TenantId,
-            entry.Version);
+            entry.Version)
+        {
+            CacheMode = entry.CacheMode switch
+            {
+                NamedQueryCacheMode.None => "none",
+                NamedQueryCacheMode.Custom => "custom",
+                _ => "default",
+            },
+            L1TtlSeconds = entry.L1TtlSeconds,
+            L2TtlSeconds = entry.L2TtlSeconds,
+        };
     }
 }

@@ -238,10 +238,55 @@ public sealed class QueryResultCacheTests
         Assert.Equal(2, calls);
     }
 
+    [Fact]
+    public async Task DisabledPolicyBypassesReadAndWrite()
+    {
+        var l2 = new FakeDistributedCache();
+        var cache = Create(l2);
+        var calls = 0;
+        var policy = QueryCachePolicy.Disabled;
+
+        ValueTask<byte[]> Factory(CancellationToken _)
+        {
+            Interlocked.Increment(ref calls);
+            return ValueTask.FromResult(new byte[] { 1 });
+        }
+
+        await cache.GetOrCreateAsync("k", Factory, policy, CancellationToken.None);
+        await cache.GetOrCreateAsync("k", Factory, policy, CancellationToken.None);
+
+        Assert.Equal(2, calls);
+        Assert.Null(l2.LastOptions);
+    }
+
+    [Fact]
+    public async Task CustomPolicyClampsTheDistributedTtl()
+    {
+        var l2 = new FakeDistributedCache();
+        var cache = Create(l2);
+        var policy = new QueryCachePolicy(
+            QueryCacheMode.Custom,
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromSeconds(5));
+
+        await cache.GetOrCreateAsync(
+            "k",
+            _ => ValueTask.FromResult(new byte[] { 1 }),
+            policy,
+            CancellationToken.None);
+
+        Assert.NotNull(l2.LastOptions);
+        Assert.True(
+            l2.LastOptions!.AbsoluteExpirationRelativeToNow <=
+            TimeSpan.FromSeconds(5));
+    }
+
     private sealed class FakeDistributedCache : IDistributedCache
     {
         private readonly Dictionary<string, byte[]> _values =
             new(StringComparer.Ordinal);
+
+        public DistributedCacheEntryOptions? LastOptions { get; private set; }
 
         public byte[]? Get(string key) =>
             _values.TryGetValue(key, out var value) ? value : null;
@@ -266,8 +311,11 @@ public sealed class QueryResultCacheTests
             return Task.CompletedTask;
         }
 
-        public void Set(string key, byte[] value, DistributedCacheEntryOptions options) =>
+        public void Set(string key, byte[] value, DistributedCacheEntryOptions options)
+        {
+            LastOptions = options;
             _values[key] = value;
+        }
 
         public Task SetAsync(
             string key,
