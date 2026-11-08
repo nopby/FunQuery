@@ -1,6 +1,6 @@
 # Named Queries (`$named`) — Work Plan
 
-**Status:** 🚧 N1–N7 implemented; N8 pending.
+**Status:** ✅ Complete (N1–N8).
 
 **Goal:** let a client invoke a pre-approved query stored in `funquery.named_queries` by key, without
 sending query text and without exposing the catalog as a query source.
@@ -524,7 +524,7 @@ Error messages must not list available keys.
 | N5 | HTTP `?key=` and `$named` resolution | N2, N4 | M | ✅ |
 | N6 | Permission, app/tenant, and source checks | N5 | S | ✅ |
 | N7 | Cache policy integration and invalidation | N5 | M | ✅ |
-| N8 | Tests, docs, AOT publish and smoke test | N1–N7 | S | ⏳ |
+| N8 | Tests, docs, AOT publish and smoke test | N1–N7 | S | ✅ |
 
 ### N1 — Catalog schema and model
 
@@ -660,8 +660,13 @@ N1–N3 are implemented:
   catalog source-registration checks, and scope/permission tests.
 * N7: named-query cache keys include app/tenant/key/version/query hash; cache mode and TTLs come from
   the catalog and are clamped by the host. `?key=` and `$named` share the same result-cache key.
+* N8: [`NamedQueries.md`](NamedQueries.md) covers setup, key/function HTTP usage, admin CRUD, cache modes,
+  permissions/SSO, errors, and limitations. `Development.md`, `HttpApi.md`, and `README.md` link the new
+  surface.
 * Full suite: **1233 tests**. The catalog schema has been applied to the local development database.
-* N8 (docs and AOT close-out) remains pending.
+* Native AOT publish of the PostgreSQL host succeeded with the named-query store and listener. The
+  published binary served `/playground/`, `/docs`, `?key=orders-over-100`, and
+  `$named('orders-over-100')` against PostgreSQL and Valkey.
 
 ## Risks and open decisions
 

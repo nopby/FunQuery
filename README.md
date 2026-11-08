@@ -245,6 +245,11 @@ a PostgreSQL CTE. Other SQL dialects remain future work. See
 [`docs/PostgreSql.md`](docs/PostgreSql.md) for registration, the supported subset, and the limitations
 matrix, and [`docs/CtePlan.md`](docs/CtePlan.md) for the CTE implementation plan and result.
 
+Named queries can run a pre-approved catalog query by key (`?key=...` or `$named('...')`), with
+app/tenant scoping, per-query cache policy, and an opt-in admin CRUD API. See
+[`docs/NamedQueries.md`](docs/NamedQueries.md) and
+[`docs/NamedQueryPlan.md`](docs/NamedQueryPlan.md).
+
 See [`docs/Milestone6.md`](docs/Milestone6.md) for the staged plan,
 [`docs/HttpApi.md`](docs/HttpApi.md) for the GET/POST endpoints, variables, limits, security, and error
 contract, [`docs/OpenApi.md`](docs/OpenApi.md) for the OpenAPI document and docs UI,

@@ -12,11 +12,12 @@ GET /query?q=<url-encoded query>&source=<registered source>
 
 | Part | Rule |
 | ---- | ---- |
-| `q` | Required. The URL-decoded value is the FunQuery expression. An empty or missing value is `INVALID_REQUEST` |
-| `source` | Optional. Name of a source registered with `AddFunQuerySources`. The selected source is bound to `@source`; an unknown name is `UNKNOWN_SOURCE` |
+| `q` | Required unless `key` is supplied. The URL-decoded value is the FunQuery expression. An empty or missing value is `INVALID_REQUEST` |
+| `key` | Optional named-query key. Mutually exclusive with `q` and `source`; resolved from `funquery.named_queries`. See [`NamedQueries.md`](NamedQueries.md) |
+| `source` | Optional. Name of a source registered with `AddFunQuerySources`. The selected source is bound to `@source`; an unknown name is `UNKNOWN_SOURCE`. Cannot be combined with `key` |
 | Result | `200` with the query result as JSON, exactly as `QueryResult.ToJson()` produces it. The result is never wrapped in an envelope |
 | Content type | `application/json; charset=utf-8` on success and on every error |
-| Route and parameters | Configurable at startup through `FunQueryOptions.Route`, `QueryParameter`, and `SourceParameter` |
+| Route and parameters | Configurable at startup through `FunQueryOptions.Route`, `QueryParameter`, `KeyParameter`, and `SourceParameter` |
 
 ```bash
 curl "http://localhost:5000/query?q=%24source(%5B1%2C2%2C3%5D).%24count()"
@@ -41,8 +42,9 @@ Content-Type: application/json
 
 | Field | Rule |
 | ----- | ---- |
-| `query` | Required string. Same language and same `QueryLimits.MaxInputLength` as GET |
-| `source` | Optional string; same registry and `@source` binding as GET |
+| `key` | Optional named-query key. Mutually exclusive with `query` and `source` |
+| `query` | Required unless `key` is supplied. Same language and same `QueryLimits.MaxInputLength` as GET |
+| `source` | Optional string; same registry and `@source` binding as GET. Cannot be combined with `key` |
 | `variables` | Optional object of JSON scalars; `null` means no variables. Arrays and objects are rejected (`INVALID_PARAMETER`) |
 | Unknown properties | Ignored, so adding a field later does not break older clients |
 | Content type | Must be JSON (`application/json` or a `+json` type). Anything else is `UNSUPPORTED_MEDIA_TYPE` (`415`) |
@@ -77,6 +79,21 @@ analyzes the query against the source schema, then calls the source's `IQuerySou
 (for example the PostgreSQL provider). The `@source` binding and the error envelope are identical;
 only the execution path differs. See [`PostgreSql.md`](PostgreSql.md) for the provider's supported
 subset and limitations.
+
+## Named queries
+
+A named query runs a pre-approved query from `funquery.named_queries`:
+
+```http
+GET /query?key=orders-over-100&v.min=100
+GET /query?q=$named('orders-over-100')&v.min=100
+```
+
+Both forms use the same resolver and the same cache entry. The source and cache policy come from the
+catalog row; the client must not send `source`. Parameters remain `v.<name>`.
+
+See [`NamedQueries.md`](NamedQueries.md) for the schema, admin CRUD API, cache modes, permissions,
+and SSO hooks.
 
 ## Variables
 

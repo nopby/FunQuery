@@ -36,6 +36,7 @@ nav:
       - Variables: Variables.md
       - Field Access: FieldAccess.md
   - HTTP API: HttpApi.md
+  - Named Queries: NamedQueries.md
   - OpenAPI & Docs UI: OpenApi.md
   - Providers:
       - Overview: Providers.md

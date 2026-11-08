@@ -145,6 +145,36 @@ authorization are never cached. In a multi-tenant host, register an `IQueryCache
 tenant/user scope becomes part of the cache key. Cross-instance single-flight (Redis lock) is not
 enabled yet; each instance may execute the same miss once.
 
+### Named queries
+
+Apply the catalog schema and add a sample row:
+
+```powershell
+Get-Content db/named_queries.sql -Raw |
+  podman exec -i funquery-postgres psql -U postgres -d postgres
+```
+
+```sql
+INSERT INTO funquery.named_queries
+    (app_id, tenant_id, query_key, query_text, source_name,
+     cache_mode, l1_ttl_seconds, l2_ttl_seconds)
+VALUES
+    ('global', 'global', 'orders-over-100',
+     '$source(@source).$filter(total gt @min).$select(id, customer, total)',
+     'orders', 'custom', 2, 30);
+```
+
+The PostgreSQL sample host registers the catalog store and `LISTEN/NOTIFY` listener automatically.
+Call it by key or function:
+
+```bash
+curl "http://localhost:5000/query?key=orders-over-100&v.min=100"
+curl "http://localhost:5000/query?q=%24named(%27orders-over-100%27)&v.min=100"
+```
+
+The admin CRUD API is opt-in and requires an authorizer. See
+[`NamedQueries.md`](NamedQueries.md) for the admin routes, cache modes, permissions, and SSO hooks.
+
 ### 6. Run the tests
 
 ```bash
@@ -152,7 +182,7 @@ dotnet test
 ```
 
 With `FUNQUERY_POSTGRES` set, the live PostgreSQL tests run. Without it, they return early; the
-in-memory, golden SQL, and unit tests still run. The full suite is 1161 tests with PostgreSQL 18.3.
+in-memory, golden SQL, and unit tests still run. The full suite is 1233 tests with PostgreSQL 18.3.
 
 ### 7. Stop and clean up
 
