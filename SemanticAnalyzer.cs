@@ -486,10 +486,11 @@ public static class SemanticAnalyzer
                 $"Unknown function '{functionName}'.",
                 expression.Function);
 
-        // 3. Validasi target sebelum argumen, karena scope argumen bergantung pada tipe target.
-        // Berlaku juga untuk $let (Optional, jadi selalu lolos) dan $field (Forbidden, dengan
-        // $let di depannya tetap transparan lewat HasRealTarget), supaya keduanya tidak perlu
-        // menduplikasi pengecekan target sendiri-sendiri.
+        // 3. $named bukan function data: ia hanya boleh menjadi root query dan di-resolve host.
+        if (functionName == "$named")
+            return AnalyzeNamed(expression, context);
+
+        // 4. Validasi target sebelum argumen, karena scope argumen bergantung pada tipe target.
         ValidateTarget(expression, function, context);
 
         // $let dan $field bukan function data biasa: keduanya tidak tunduk pada
@@ -553,6 +554,54 @@ public static class SemanticAnalyzer
             .ToList();
 
         expression.SemanticType = function.GetReturnType(targetType, argumentTypes);
+
+        return expression;
+    }
+
+    /// <summary>
+    /// $named('key'): hanya root query, satu string literal, di-resolve host sebelum provider.
+    /// </summary>
+    private static CallExpression AnalyzeNamed(
+        CallExpression expression,
+        SemanticContext context)
+    {
+        if (expression.Target is not null || !context.IsTopLevel)
+        {
+            throw new QueryException(
+                QueryErrorCode.InvalidNamedQueryPosition,
+                "Function '$named' must be the complete top-level query.",
+                expression.Function);
+        }
+
+        if (expression.Arguments.Count != 1)
+        {
+            throw new QueryException(
+                QueryErrorCode.InvalidArgumentCount,
+                "Function '$named' requires exactly 1 argument: $named('key').",
+                expression.Function);
+        }
+
+        if (expression.Arguments[0] is not ValueExpression value ||
+            value.Token.Type != TokenType.StringLiteral)
+        {
+            throw new QueryException(
+                QueryErrorCode.TypeMismatch,
+                "Function '$named' requires a string literal key.",
+                expression.Arguments[0].Span);
+        }
+
+        var key = context.GetStringLiteralValue(value);
+
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            throw new QueryException(
+                QueryErrorCode.InvalidNamedQueryKey,
+                "The named-query key must not be empty.",
+                value.Span);
+        }
+
+        context.BindNamedQueryKey(key, expression.Function);
+        expression.SemanticType = SemanticTypeOptions.AnyType;
 
         return expression;
     }

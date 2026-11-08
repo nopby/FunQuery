@@ -32,6 +32,8 @@ public enum QueryErrorCode
     UndefinedVariable,
     VariableRedefined,
     InvalidLetTarget,
+    InvalidNamedQueryPosition,
+    InvalidNamedQueryKey,
 
     // ~ dan path
     ItemOutOfContext,

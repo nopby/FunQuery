@@ -33,6 +33,15 @@ public sealed class CoreFunctions : IQueryExtension
 
         registry.Add(new FunctionDefinition
         {
+            // $named('key'): dianalisis secara khusus (lihat SemanticAnalyzer.AnalyzeNamed).
+            // Hanya boleh menjadi root query; key di-resolve host sebelum provider.
+            Name = "$named",
+            Parameters = [],
+            TargetRule = TargetRule.Forbidden,
+        });
+
+        registry.Add(new FunctionDefinition
+        {
             // $field(name) atau $field(@variable): dianalisis dan dieksekusi secara khusus
             // (lihat SemanticAnalyzer.AnalyzeField dan CoreInMemoryFunctions.Field).
             // TargetRule.Forbidden supaya tidak bisa dirantai pada data (x.$field(...)),

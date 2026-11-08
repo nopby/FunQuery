@@ -12,11 +12,13 @@ public sealed class QueryPlan
     internal QueryPlan(
         string query,
         BaseExpression expression,
-        QueryLimits limits)
+        QueryLimits limits,
+        string? namedQueryKey = null)
     {
         Query = query;
         Expression = expression;
         Limits = limits;
+        NamedQueryKey = namedQueryKey;
     }
 
     /// <summary>Teks query asli. Posisi token di AST merujuk ke teks ini.</summary>
@@ -26,4 +28,10 @@ public sealed class QueryPlan
 
     /// <summary>Batas yang dipakai saat query dianalisis; executor provider memakainya juga.</summary>
     public QueryLimits Limits { get; }
+
+    /// <summary>
+    /// Key named query dari root <c>$named</c>. Null untuk query biasa. Host/adapter harus
+    /// me-resolve key ini sebelum provider dieksekusi.
+    /// </summary>
+    public string? NamedQueryKey { get; }
 }

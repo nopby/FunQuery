@@ -56,6 +56,25 @@ public sealed class SemanticContext
 
     public void ExitNode() => _depth--;
 
+    /// <summary>True saat node saat ini adalah root expression.</summary>
+    public bool IsTopLevel => _depth == 1;
+
+    /// <summary>Key named query yang diminta oleh root <c>$named</c>, bila ada.</summary>
+    public string? NamedQueryKey { get; private set; }
+
+    internal void BindNamedQueryKey(string key, Token token)
+    {
+        if (NamedQueryKey is not null)
+        {
+            throw new QueryException(
+                QueryErrorCode.InvalidNamedQueryPosition,
+                "Only one $named call is allowed in a query.",
+                token);
+        }
+
+        NamedQueryKey = key;
+    }
+
     // ------------------------------------------------------------------
     // Source text
     // ------------------------------------------------------------------

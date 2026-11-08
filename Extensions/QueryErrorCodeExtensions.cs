@@ -31,6 +31,8 @@ public static class QueryErrorCodeExtensions
         QueryErrorCode.UndefinedVariable => "UNDEFINED_VARIABLE",
         QueryErrorCode.VariableRedefined => "VARIABLE_REDEFINED",
         QueryErrorCode.InvalidLetTarget => "INVALID_LET_TARGET",
+        QueryErrorCode.InvalidNamedQueryPosition => "INVALID_NAMED_QUERY_POSITION",
+        QueryErrorCode.InvalidNamedQueryKey => "INVALID_NAMED_QUERY_KEY",
         QueryErrorCode.ItemOutOfContext => "ITEM_OUT_OF_CONTEXT",
         QueryErrorCode.InvalidFieldArgument => "INVALID_FIELD_ARGUMENT",
         QueryErrorCode.InvalidSelectArgument => "INVALID_SELECT_ARGUMENT",
