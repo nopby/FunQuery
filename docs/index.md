@@ -11,6 +11,7 @@ implemented SQL provider.
 - [Functions](Functions.md)
 - [Variables](Variables.md)
 - [HTTP API](HttpApi.md)
+- [Authorization](Authorization.md)
 - [PostgreSQL provider](PostgreSql.md)
 
 ## Quick example

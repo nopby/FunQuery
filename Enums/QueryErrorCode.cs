@@ -68,6 +68,10 @@ public enum QueryErrorCode
     ResultTooLarge,
     SourceTooLarge,
 
+    // Otorisasi
+    Unauthenticated,
+    Forbidden,
+
     // Bug di FunQuery sendiri, bukan kesalahan input pengguna
     InternalError,
 }

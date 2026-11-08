@@ -60,6 +60,9 @@ public static class QueryErrorCodeExtensions
         QueryErrorCode.ResultTooLarge => "RESULT_TOO_LARGE",
         QueryErrorCode.SourceTooLarge => "SOURCE_TOO_LARGE",
 
+        QueryErrorCode.Unauthenticated => "UNAUTHENTICATED",
+        QueryErrorCode.Forbidden => "FORBIDDEN",
+
         _ => "INTERNAL_ERROR",
     };
 

@@ -333,6 +333,7 @@ The adapter is meant to accept input from untrusted clients. The rules below are
 | Query limits | Input length, token count, parser depth, source rows, parameter count/value length, body bytes, execution time, and result items are enforced before or during execution |
 | Cancellation | Client disconnect sets `RequestAborted`; execution stops and no response is written |
 | AOT | The sample host is published with Native AOT; endpoints use `RequestDelegate`, so there is no reflection-based handler binding |
+| Authorization | Optional `IQueryIdentityProvider` + `IQueryAuthorizer` run before the cache and execution; deny returns `401 UNAUTHENTICATED` or `403 FORBIDDEN`. See [`Authorization.md`](Authorization.md) |
 
 See [`Sources.md`](Sources.md) for the source whitelist and row contract.
 

@@ -152,6 +152,46 @@ public static class FunQueryEndpointRouteBuilderExtensions
                 variables);
         });
 
+    private static async Task AuthorizeAsync(
+        HttpContext context,
+        string query,
+        string? sourceName,
+        CancellationToken cancellationToken)
+    {
+        var authorizer = context.RequestServices.GetService<IQueryAuthorizer>();
+
+        if (authorizer is null)
+        {
+            return;
+        }
+
+        var provider = context.RequestServices.GetService<IQueryIdentityProvider>();
+        var identity = provider is null
+            ? new QueryIdentity()
+            : await provider.ResolveAsync(context, cancellationToken) ?? new QueryIdentity();
+
+        var decision = await authorizer.AuthorizeAsync(
+            new QueryAuthorizationRequest
+            {
+                SourceName = sourceName,
+                Query = query,
+                Identity = identity,
+                HttpContext = context,
+            },
+            cancellationToken);
+
+        if (decision.IsAllowed)
+        {
+            return;
+        }
+
+        throw new QueryException(
+            decision.IsUnauthenticated ? QueryErrorCode.Unauthenticated : QueryErrorCode.Forbidden,
+            string.IsNullOrWhiteSpace(decision.Message)
+                ? (decision.IsUnauthenticated ? "Authentication is required." : "Access denied.")
+                : decision.Message);
+    }
+
     private static async Task<IResult> ExecuteAsync(
         HttpContext context,
         FunQueryOptions options,
@@ -236,6 +276,10 @@ public static class FunQueryEndpointRouteBuilderExtensions
         }
 
         var cache = context.RequestServices.GetService<IQueryResultCache>();
+
+        // Authorization happens after $named resolution and before cache/execution, so a denied
+        // request can never hit the cache or the source.
+        await AuthorizeAsync(context, query, sourceName, context.RequestAborted);
 
         if (cache is not null && cache.Enabled)
         {
