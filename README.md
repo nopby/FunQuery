@@ -240,6 +240,10 @@ The sample expects an `orders` table with `id integer`, `customer text`, `total 
 dotnet publish hosts/FunQuery.PostgreSql.Server -c Release -r win-x64
 ```
 
+With SDK `10.0.401`, the bundled Native AOT pack is affected by `GHSA-p3jp-9v83-76w9`
+(CVE-2026-111497). Until SDK `10.0.403+`, add
+`-p:RuntimeFrameworkVersion=10.0.14 -p:NuGetAudit=false` to the publish command.
+
 M6.3–M6.6 are implemented; Milestone 6 is complete for PostgreSQL. A result-set `$let` is rendered as
 a PostgreSQL CTE. Other SQL dialects remain future work. See
 [`docs/PostgreSql.md`](docs/PostgreSql.md) for registration, the supported subset, and the limitations

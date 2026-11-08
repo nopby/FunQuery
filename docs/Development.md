@@ -184,6 +184,31 @@ dotnet test
 With `FUNQUERY_POSTGRES` set, the live PostgreSQL tests run. Without it, they return early; the
 in-memory, golden SQL, and unit tests still run. The full suite is 1233 tests with PostgreSQL 18.3.
 
+### AOT publish
+
+Native AOT publish uses the same host projects:
+
+```powershell
+dotnet publish hosts/FunQuery.Server `
+  -c Release -r win-x64 --self-contained true
+
+dotnet publish hosts/FunQuery.PostgreSql.Server `
+  -c Release -r win-x64 --self-contained true
+```
+
+With SDK `10.0.401`, the bundled Native AOT pack `10.0.12` is affected by
+`GHSA-p3jp-9v83-76w9` (CVE-2026-111497). Until the SDK is `10.0.403` or newer, pin the patched runtime
+and bypass the audit for the publish only:
+
+```powershell
+dotnet publish hosts/FunQuery.PostgreSql.Server `
+  -c Release -r win-x64 --self-contained true `
+  -p:RuntimeFrameworkVersion=10.0.14 `
+  -p:NuGetAudit=false
+```
+
+Run the published binary from its publish directory so `wwwroot` and `appsettings.json` resolve.
+
 ### 7. Stop and clean up
 
 ```powershell
