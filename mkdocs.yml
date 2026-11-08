@@ -51,6 +51,7 @@ nav:
       - Milestone 7: Milestone7.md
       - CTE Support (Plan): CtePlan.md
       - Query Cache (Plan): CachePlan.md
+      - Named Queries (Plan): NamedQueryPlan.md
 
 markdown_extensions:
   - admonition
