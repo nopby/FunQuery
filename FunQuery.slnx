@@ -6,6 +6,7 @@
   <Folder Name="/src/">
     <Project Path="src/FunQuery.AspNetCore/FunQuery.AspNetCore.csproj" />
     <Project Path="src/FunQuery.Caching/FunQuery.Caching.csproj" />
+    <Project Path="src/FunQuery.NamedQueries/FunQuery.NamedQueries.csproj" />
     <Project Path="src/FunQuery.Playground/FunQuery.Playground.csproj" />
     <Project Path="src/FunQuery.PostgreSql/FunQuery.PostgreSql.csproj" />
     <Project Path="src/FunQuery.Sql/FunQuery.Sql.csproj" />
@@ -13,6 +14,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/FunQuery.AspNetCore.Tests/FunQuery.AspNetCore.Tests.csproj" />
     <Project Path="tests/FunQuery.Caching.Tests/FunQuery.Caching.Tests.csproj" />
+    <Project Path="tests/FunQuery.NamedQueries.Tests/FunQuery.NamedQueries.Tests.csproj" />
     <Project Path="tests/FunQuery.PostgreSql.Tests/FunQuery.PostgreSql.Tests.csproj" />
     <Project Path="tests/FunQuery.Sql.Tests/FunQuery.Sql.Tests.csproj" />
     <Project Path="tests/FunQuery.Tests/FunQuery.Tests.csproj" />

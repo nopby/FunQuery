@@ -1,6 +1,6 @@
 # Named Queries (`$named`) — Work Plan
 
-**Status:** 📝 Proposed. Waiting for review.
+**Status:** 🚧 N1–N3 implemented; N4–N8 pending.
 
 **Goal:** let a client invoke a pre-approved query stored in `funquery.named_queries` by key, without
 sending query text and without exposing the catalog as a query source.
@@ -640,6 +640,21 @@ Error messages must not list available keys.
 * Errors use stable codes and never list keys.
 * Full test suite, PostgreSQL integration, and Native AOT smoke test pass.
 * Documentation and sample catalog row are included.
+
+## Progress
+
+N1–N3 are implemented:
+
+* N1: `db/named_queries.sql` with schema, table, index, trigger; `NamedQueryEntry`,
+  `NamedQueryStoreOptions`, and `INamedQueryStore`.
+* N2: `PostgreSqlNamedQueryStore`, `NamedQueryLookupCache`, `NamedQueryChangeListener`, and live
+  PostgreSQL tests for CRUD/versioning and `LISTEN/NOTIFY` invalidation.
+* N3: `NamedQueryAdminService`, `INamedQueryAdminAuthorizer`, configurable
+  `MapFunQueryNamedQueryAdmin`, route-conflict detection, host-owned authorization hook, and endpoint
+  integration tests.
+* Full suite: **1206 tests**. The catalog schema has been applied to the local development database.
+* N4–N8 (`$named`, `?key=` resolution, permissions, cache integration, docs/AOT close-out) remain
+  pending.
 
 ## Risks and open decisions
 
